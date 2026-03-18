@@ -116,6 +116,14 @@ Workflow sudah disiapkan di `.github/workflows/report-pages.yml` dengan fitur:
 3. Pada **Build and deployment**, set **Source** ke **GitHub Actions**.
 4. Jalankan workflow `Build And Deploy VMess Report`.
 
+### Auto-update deskripsi repo dengan URL public
+
+Workflow juga akan mencoba menulis URL GitHub Pages ke deskripsi repo dalam format `Pages: <url>`.
+
+- Disarankan set secret `REPO_DESC_TOKEN` di **Settings -> Secrets and variables -> Actions**.
+- Nilai secret: GitHub PAT dengan scope `repo` (dan `workflow` jika kamu juga push perubahan workflow via token itu).
+- Jika secret tidak ada / izin kurang, deploy tetap jalan karena step ini `continue-on-error`.
+
 ### Trigger manual opsional
 
 Saat menjalankan manual (`Run workflow`), tersedia input:

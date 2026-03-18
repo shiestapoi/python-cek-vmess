@@ -17,7 +17,7 @@ on:
         default: "0"
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -89,3 +89,20 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Update repository description with Pages URL
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DESC_TOKEN || github.token }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          current_desc=$(gh api "repos/$REPO" --jq '.description // ""')
+          clean_desc=$(python -c "import re,sys; s=sys.argv[1]; print(re.sub(r'\s*\|\s*Pages:\s*https?://\S+','',s).strip())" "$current_desc")
+          if [ -n "$clean_desc" ]; then
+            new_desc="$clean_desc | Pages: $PAGE_URL"
+          else
+            new_desc="Pages: $PAGE_URL"
+          fi
+          gh api -X PATCH "repos/$REPO" -f description="$new_desc"
+          echo "Repository description updated: $new_desc"
