@@ -28,7 +28,7 @@ Jalankan cell berikut:
 Saat run script, inject PATH di command yang sama:
 
 ```bash
-!PATH="$PWD/xray-bin:$PATH" python vmess_report.py --check-connectivity --connect-timeout 10 --connect-workers 40
+!PATH="$PWD/xray-bin:$PATH" python vmess_report.py
 ```
 
 ## Input
@@ -68,6 +68,12 @@ python vmess_report.py --all
 python vmess_report.py --check-connectivity --connect-timeout 10 --connect-workers 40
 ```
 
+### 4b) Nonaktifkan connectivity check (opsional)
+
+```bash
+python vmess_report.py --no-check-connectivity
+```
+
 ### 5) Generate HTML dari JSON yang sudah ada (tanpa parse ulang config)
 
 ```bash
@@ -90,7 +96,7 @@ python vmess_report.py --report-only --report-json report.json --check-connectiv
 - `--max-entries` batasi jumlah entry (default: `0` = all)
 - `--all` paksa proses semua entry
 - `--timeout` timeout lookup geolocation
-- `--check-connectivity` aktifkan test konektivitas VMess
+- `--check-connectivity` / `--no-check-connectivity` toggle test konektivitas VMess (default: aktif)
 - `--connect-timeout` budget waktu per VMess connectivity check (default: `10`)
 - `--connect-workers` jumlah worker paralel connectivity check (default: `80`)
 - `--no-progress` nonaktifkan progress bar CLI

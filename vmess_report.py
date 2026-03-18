@@ -1466,8 +1466,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--check-connectivity",
-        action="store_true",
-        help="Check VMess TCP connectivity and update JSON/HTML",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Check VMess TCP connectivity and update JSON/HTML (default: enabled)",
     )
     parser.add_argument(
         "--connect-timeout",

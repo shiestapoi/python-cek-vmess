@@ -9,7 +9,7 @@ on:
         description: "Run connectivity checks with xray"
         required: true
         type: boolean
-        default: false
+        default: true
       max_entries:
         description: "Max VMess entries to process (0 = all)"
         required: true
@@ -50,22 +50,17 @@ jobs:
       - name: Prepare output directory
         run: mkdir -p site
 
-      - name: Generate report (default)
+      - name: Generate report
         env:
           MAX_ENTRIES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries || '0' }}
+          CHECK_CONNECTIVITY: ${{ github.event_name != 'workflow_dispatch' || inputs.check_connectivity }}
         run: |
           ARGS="--no-progress"
-          if [ "$MAX_ENTRIES" != "0" ]; then
-            ARGS="$ARGS --max-entries $MAX_ENTRIES"
+          if [ "$CHECK_CONNECTIVITY" = "true" ]; then
+            ARGS="$ARGS --check-connectivity --connect-timeout 10 --connect-workers 40"
+          else
+            ARGS="$ARGS --no-check-connectivity"
           fi
-          PATH="$PWD/xray-bin:$PATH" python vmess_report.py --output site/index.html --json site/report.json $ARGS
-
-      - name: Generate report with connectivity
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.check_connectivity == true }}
-        env:
-          MAX_ENTRIES: ${{ inputs.max_entries }}
-        run: |
-          ARGS="--no-progress --check-connectivity --connect-timeout 10 --connect-workers 40"
           if [ "$MAX_ENTRIES" != "0" ]; then
             ARGS="$ARGS --max-entries $MAX_ENTRIES"
           fi
