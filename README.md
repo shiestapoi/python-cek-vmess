@@ -33,7 +33,8 @@ Saat run script, inject PATH di command yang sama:
 
 ## Input
 
-- Default input: `vmess_configs.txt`
+- Default source: `https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vmess_configs.txt`
+- Jika `-i/--input` diarahkan ke file lokal dan file itu ada, script akan pakai file lokal.
 - Script akan ekstrak semua token `vmess://...` dari file text campuran.
 
 ## Output
@@ -81,7 +82,7 @@ python vmess_report.py --report-only --report-json report.json --check-connectiv
 
 ## Argumen Penting
 
-- `-i, --input` path file vmess text (default: `vmess_configs.txt`)
+- `-i, --input` path file vmess text (default: remote VMess source URL)
 - `-o, --output` path output HTML (default: `report.html`)
 - `--json` path output JSON saat mode normal (default: `report.json`)
 - `--report-only` generate HTML dari JSON existing

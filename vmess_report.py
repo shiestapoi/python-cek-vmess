@@ -1445,7 +1445,10 @@ def main() -> None:
         description="Decode VMess configs and generate HTML report"
     )
     parser.add_argument(
-        "-i", "--input", default="vmess_configs.txt", help="Input VMess text file"
+        "-i",
+        "--input",
+        default=None,
+        help="Input VMess text file (default: fetch from remote VMess source)",
     )
     parser.add_argument(
         "-o", "--output", default="report.html", help="Output HTML report file"

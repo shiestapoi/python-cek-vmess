@@ -11,6 +11,9 @@ report.json
 report_*.html
 report_*.json
 
+# VMess source list (fetched from remote by default)
+vmess_configs.txt
+
 # Colab / local downloaded binaries
 xray.zip
 xray-bin/
