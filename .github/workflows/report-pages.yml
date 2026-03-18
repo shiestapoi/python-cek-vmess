@@ -1,0 +1,91 @@
+name: Build And Deploy VMess Report
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      check_connectivity:
+        description: "Run connectivity checks with xray"
+        required: true
+        type: boolean
+        default: false
+      max_entries:
+        description: "Max VMess entries to process (0 = all)"
+        required: true
+        type: string
+        default: "0"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system tools
+        run: sudo apt-get update && sudo apt-get install -y curl unzip
+
+      - name: Install xray
+        run: |
+          curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          unzip -o xray.zip -d xray-bin
+          chmod +x xray-bin/xray
+          ./xray-bin/xray version
+
+      - name: Prepare output directory
+        run: mkdir -p site
+
+      - name: Generate report (default)
+        env:
+          MAX_ENTRIES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries || '0' }}
+        run: |
+          ARGS="--no-progress"
+          if [ "$MAX_ENTRIES" != "0" ]; then
+            ARGS="$ARGS --max-entries $MAX_ENTRIES"
+          fi
+          PATH="$PWD/xray-bin:$PATH" python vmess_report.py --output site/index.html --json site/report.json $ARGS
+
+      - name: Generate report with connectivity
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.check_connectivity == true }}
+        env:
+          MAX_ENTRIES: ${{ inputs.max_entries }}
+        run: |
+          ARGS="--no-progress --check-connectivity --connect-timeout 10 --connect-workers 40"
+          if [ "$MAX_ENTRIES" != "0" ]; then
+            ARGS="$ARGS --max-entries $MAX_ENTRIES"
+          fi
+          PATH="$PWD/xray-bin:$PATH" python vmess_report.py --output site/index.html --json site/report.json $ARGS
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

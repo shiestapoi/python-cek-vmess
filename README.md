@@ -100,3 +100,30 @@ python vmess_report.py --report-only --report-json report.json --check-connectiv
 - Status `not matched`: koneksi ada, tapi IP keluar tidak cocok.
 - Status `failed`: VMess tidak bisa dipakai untuk load `ifconfig.me/ip` dalam budget waktu.
 - Status `skipped`: entry geolocation/status awal tidak layak diuji.
+
+## GitHub Actions + GitHub Pages
+
+Workflow sudah disiapkan di `.github/workflows/report-pages.yml` dengan fitur:
+
+- schedule otomatis tiap 6 jam (`0 */6 * * *`)
+- trigger manual (`workflow_dispatch`)
+- deploy hasil report ke GitHub Pages via GitHub Actions
+
+### Cara pakai
+
+1. Push repository ini ke GitHub.
+2. Di GitHub repo, buka **Settings -> Pages**.
+3. Pada **Build and deployment**, set **Source** ke **GitHub Actions**.
+4. Jalankan workflow `Build And Deploy VMess Report`.
+
+### Trigger manual opsional
+
+Saat menjalankan manual (`Run workflow`), tersedia input:
+
+- `check_connectivity` (`true/false`): jalankan connectivity check via xray.
+- `max_entries` (`0` = semua): batasi jumlah entry yang diproses.
+
+Output Pages:
+
+- `index.html` (report utama)
+- `report.json` (data mentah)
