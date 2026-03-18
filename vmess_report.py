@@ -86,9 +86,15 @@ def load_api_keys_from_env(
 
 
 def read_input_source(input_file: Optional[str], input_url: str) -> Tuple[str, str]:
-    if input_file:
+    if input_file and os.path.exists(input_file):
         with open(input_file, "r", encoding="utf-8", errors="replace") as f:
             return f.read(), input_file
+
+    if input_file:
+        print(
+            f"Input file not found: {input_file}. Falling back to URL source: {input_url}",
+            file=sys.stderr,
+        )
 
     with urllib.request.urlopen(input_url, timeout=20) as response:
         content = response.read().decode("utf-8", errors="replace")
@@ -1496,6 +1502,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    env_keys = load_api_keys_from_env()
+    api_keys = env_keys if env_keys else list(IPGEOLOCATION_KEYS)
+
     if args.report_only:
         if not os.path.exists(args.report_json):
             raise FileNotFoundError(
@@ -1507,11 +1516,14 @@ def main() -> None:
         if not isinstance(rows, list):
             raise ValueError("Invalid report JSON format: expected a list of objects")
         rows = [r for r in rows if isinstance(r, dict)]
+        source_label = args.report_json
     else:
         max_entries = 0 if args.all else max(0, args.max_entries)
+        content, source_label = read_input_source(args.input, DEFAULT_VMESS_URL)
         rows = process_file(
-            args.input,
+            content,
             args.timeout,
+            api_keys,
             show_progress=not args.no_progress,
             max_entries=max_entries,
         )
@@ -1531,7 +1543,7 @@ def main() -> None:
         with open(args.json, "w", encoding="utf-8") as jf:
             json.dump(rows, jf, ensure_ascii=False, indent=2)
 
-    html_text = generate_html(rows, args.input)
+    html_text = generate_html(rows, source_label)
     with open(args.output, "w", encoding="utf-8") as hf:
         hf.write(html_text)
 
