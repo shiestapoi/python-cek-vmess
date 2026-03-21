@@ -1099,70 +1099,109 @@ def parse_ipinfo_lite_response(data: Dict[str, Any]) -> Optional[Dict[str, str]]
             "services": services, "lookup_source": "ipinfo.io/lite"}
 
 
+def _to_plain(v: Any) -> Any:
+    """Recursively convert maxminddb values to plain Python types."""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if isinstance(v, dict):
+        return {k: _to_plain(vv) for k, vv in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_to_plain(i) for i in v]
+    # maxminddb Record / Model objects expose .items()
+    try:
+        return {k: _to_plain(vv) for k, vv in v.items()}
+    except (AttributeError, TypeError, ValueError):
+        return str(v)
+
+
 def _mmdb_to_dict(record: Any) -> Dict[str, Any]:
-    """Safely flatten a maxminddb record to a plain dict."""
+    """Safely convert a maxminddb record to a plain Python dict (recursive)."""
     if record is None:
         return {}
     if isinstance(record, dict):
-        return record
+        return {k: _to_plain(v) for k, v in record.items()}
     try:
-        return dict(record)
-    except Exception:
+        return {k: _to_plain(v) for k, v in record.items()}
+    except (AttributeError, TypeError, ValueError):
         return {}
 
 
 def parse_geolite2_city_record(record: Any) -> Dict[str, str]:
-    """Parse GeoLite2-City.mmdb / dbip-city.mmdb / geolite2-city.mmdb record.
+    """Parse GeoLite2-City.mmdb / ip-location-db city mmdb record.
 
-    GeoLite2-City schema (nested):
-      record.country.names.en          → country name
-      record.country.iso_code          → country code
-      record.city.names.en             → city name
-      record.subdivisions[0].names.en  → state/region
-      record.continent.names.en        → continent
+    Verified schema from sapics/ip-location-db geolite2-city-ipv4/v6.mmdb:
+      {
+        "city":         "Palembang",   # may be empty string ""
+        "country_code": "ID",          # ISO 3166-1 alpha-2
+        "latitude":     -2.9146,
+        "longitude":    104.7535,
+        "postcode":     "30151",       # may be empty
+        "state1":       "South Sumatra",  # province/region, may be empty
+        "state2":       "",
+        "timezone":     "Asia/Jakarta"
+      }
 
-    DB-IP / ip-location-db city MMDB may use a flatter layout — we handle both.
+    Also handles the MaxMind GeoLite2 nested schema (country.names.en, etc.)
+    for compatibility with other mmdb sources.
     """
     d = _mmdb_to_dict(record)
     if not d:
         return {}
 
     def _names_en(obj: Any) -> str:
-        """Extract .names.en from a nested mmdb sub-object."""
+        """Extract .names.en from a MaxMind-style nested sub-object."""
         if not obj:
             return ""
         sub = _mmdb_to_dict(obj)
-        names = _mmdb_to_dict(sub.get("names") or sub.get("name"))
+        names = _mmdb_to_dict(sub.get("names") or sub.get("name") or {})
         return _s(names.get("en") or names.get(""), "")
 
     # ── Country ──────────────────────────────────────────────────────────────
+    # sapics flat layout uses "country_code" (ISO alpha-2, e.g. "ID", "HK")
+    # MaxMind nested layout uses country.names.en / country.iso_code
     country_obj = d.get("country") or d.get("registered_country") or {}
     country = (
-        _names_en(country_obj)
-        or _s(d.get("country"))          # flat layout (some DBs)
+        _s(d.get("country_code"))                        # flat  (sapics)
+        or _names_en(country_obj)                        # nested (MaxMind)
+        or _s(d.get("country"))                          # flat country name
         or _s(d.get("country_name"))
     )
 
     # ── City ─────────────────────────────────────────────────────────────────
-    city_obj = d.get("city") or {}
-    city = _names_en(city_obj) or _s(d.get("city"))
+    # Priority: city → state1 (province) → state2 → MaxMind subdivisions
+    #           → MaxMind continent → timezone region
+    city_raw = _s(d.get("city"), "")
+    city = city_raw if city_raw and city_raw != "—" else ""
 
-    # Fall back: subdivision (state/province) → continent
-    if not city or city == "—":
+    if not city:
+        city = _s(d.get("state1"), "") or _s(d.get("state2"), "")
+
+    if not city:
+        # MaxMind nested subdivisions
         subdivisions = d.get("subdivisions") or []
         if subdivisions:
             try:
-                city = _names_en(subdivisions[0]) or city
+                city = _names_en(subdivisions[0])
             except Exception:
-                pass
-    if not city or city == "—":
-        city = _names_en(d.get("continent") or {}) or _s(d.get("continent"))
+                city = ""
+
+    if not city:
+        city_obj = d.get("city") or {}
+        city = _names_en(city_obj)
+
+    if not city:
+        city = _names_en(d.get("continent") or {}) or _s(d.get("continent"), "")
+
+    if not city:
+        # Last resort: extract region from timezone e.g. "Asia/Jakarta" → "Jakarta"
+        tz = _s(d.get("timezone"), "")
+        if tz and "/" in tz:
+            city = tz.split("/", 1)[1].replace("_", " ")
 
     result: Dict[str, str] = {}
     if country and country != "—":
         result["country"] = country
-    if city and city != "—":
-        result["city"] = city
+    result["city"] = city if city and city != "—" else "—"
     return result
 
 
