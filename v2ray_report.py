@@ -1756,7 +1756,7 @@ function buildIsp(pr,co) {{
     .filter(r=>(pr==='ALL'||r.protocol===pr)&&(co==='ALL'||r.country===co))
     .map(r=>r.isp||'—');
   buildSelect(ispEl,[...new Set(list)].sort((a,b)=>a.localeCompare(b)),
-    co==='ALL'?'All ISP':`ISP (${co})`);
+    co==='ALL'?'All ISP':`ISP (${{co}})`);
 }}
 function buildConn(pr,co,is) {{
   const list=data
