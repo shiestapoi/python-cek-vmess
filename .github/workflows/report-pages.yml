@@ -64,7 +64,7 @@ jobs:
           if [ "$MAX_ENTRIES" != "0" ]; then
             ARGS="$ARGS --max-entries $MAX_ENTRIES"
           fi
-          PATH="$PWD/xray-bin:$PATH" python vmess_report.py --output site/index.html --json site/report.json $ARGS
+          PATH="$PWD/xray-bin:$PATH" python proxy_checker.py --output site/index.html --json site/report.json $ARGS
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

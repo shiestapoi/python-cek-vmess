@@ -50,6 +50,7 @@ IPGEOLOCATION_KEYS = [
     "efb9d83c2d2245f4abd557e68a8500d3",
     "e4f30a7389bc482f9782e1fd8a3f520c",
     "3091c2b2648b4b87b9a3e6a380b7b062",
+    "42db810ae34c412e9e8f184cb47116a0",
 ]
 
 # External IP check service
