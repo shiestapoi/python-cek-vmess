@@ -14,6 +14,25 @@ on:
           - vmess
           - vless
         default: all
+
+      vmess_url:
+        description: |
+          VMess config source URL (optional).
+          Leave empty to use script default:
+          https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/.../vmess_configs.txt
+        required: false
+        type: string
+        default: ""
+
+      vless_url:
+        description: |
+          VLess config source URL (optional).
+          Leave empty to use script default:
+          https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/.../vless_configs.txt
+        required: false
+        type: string
+        default: ""
+
       geo_provider:
         description: "Geolocation provider strategy"
         required: true
@@ -26,14 +45,22 @@ on:
           - ipinfo
           - abstract
         default: auto
+
       check_connectivity:
         description: "Run connectivity checks via xray"
         required: true
         type: boolean
         default: true
+
+      ok_only:
+        description: "HTML report shows only connectivity=ok entries"
+        required: true
+        type: boolean
+        default: true
+
       max_entries:
         description: "Max entries to process per protocol (0 = all)"
-        required: true
+        required: false
         type: string
         default: "0"
 
@@ -100,7 +127,6 @@ jobs:
           echo "Downloaded mmdb files:"
           ls -lh geolite2-*.mmdb 2>/dev/null || echo "(none found — will retry via script)"
 
-
       - name: Prepare output directory
         run: mkdir -p site
 
@@ -109,17 +135,21 @@ jobs:
           IPGEOLOCATION_API_KEYS: ${{ secrets.IPGEOLOCATION_API_KEYS }}
           IPINFO_TOKEN:           ${{ secrets.IPINFO_TOKEN }}
           ABSTRACTAPI_KEY:        ${{ secrets.ABSTRACTAPI_KEY }}
-          MODE:             ${{ github.event_name == 'workflow_dispatch' && inputs.mode          || 'all'  }}
-          GEO_PROVIDER:     ${{ github.event_name == 'workflow_dispatch' && inputs.geo_provider  || 'auto' }}
-          CHECK_CONN:       ${{ github.event_name != 'workflow_dispatch' || inputs.check_connectivity }}
-          MAX_ENTRIES:      ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries   || '0'   }}
+          # ── Runtime values (dispatch inputs or schedule defaults) ───────────
+          MODE:         ${{ github.event_name == 'workflow_dispatch' && inputs.mode          || 'all'   }}
+          GEO_PROVIDER: ${{ github.event_name == 'workflow_dispatch' && inputs.geo_provider  || 'auto'  }}
+          CHECK_CONN:   ${{ github.event_name != 'workflow_dispatch' || inputs.check_connectivity }}
+          OK_ONLY:      ${{ github.event_name != 'workflow_dispatch' || inputs.ok_only }}
+          MAX_ENTRIES:  ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries   || '0'    }}
+          VMESS_URL:    ${{ github.event_name == 'workflow_dispatch' && inputs.vmess_url     || ''     }}
+          VLESS_URL:    ${{ github.event_name == 'workflow_dispatch' && inputs.vless_url     || ''     }}
         run: |
           # ── Write .env for secret injection ────────────────────────────────
           {
             [ -n "$IPGEOLOCATION_API_KEYS" ] && \
               echo "IPGEOLOCATION_API_KEYS=$IPGEOLOCATION_API_KEYS"
-            [ -n "$IPINFO_TOKEN"  ]          && echo "IPINFO_TOKEN=$IPINFO_TOKEN"
-            [ -n "$ABSTRACTAPI_KEY" ]        && echo "ABSTRACTAPI_KEY=$ABSTRACTAPI_KEY"
+            [ -n "$IPINFO_TOKEN"   ] && echo "IPINFO_TOKEN=$IPINFO_TOKEN"
+            [ -n "$ABSTRACTAPI_KEY"] && echo "ABSTRACTAPI_KEY=$ABSTRACTAPI_KEY"
           } > .env
 
           # ── Build argument list ─────────────────────────────────────────────
@@ -127,6 +157,25 @@ jobs:
           ARGS="$ARGS --mode $MODE"
           ARGS="$ARGS --geo-provider $GEO_PROVIDER"
 
+          # ── Source URL inputs (empty = use script default) ──────────────────
+          # The script's read_source() accepts http(s):// URLs directly as input.
+          # When VMESS_URL / VLESS_URL are empty, no flag is passed and the
+          # script falls back to its own hardcoded default URLs.
+          if [ -n "$VMESS_URL" ]; then
+            ARGS="$ARGS --vmess-input '$VMESS_URL'"
+            echo "VMess source : $VMESS_URL"
+          else
+            echo "VMess source : (script default)"
+          fi
+
+          if [ -n "$VLESS_URL" ]; then
+            ARGS="$ARGS --vless-input '$VLESS_URL'"
+            echo "VLess source : $VLESS_URL"
+          else
+            echo "VLess source : (script default)"
+          fi
+
+          # ── Connectivity ────────────────────────────────────────────────────
           if [ "$CHECK_CONN" = "true" ]; then
             ARGS="$ARGS --check-connectivity"
             ARGS="$ARGS --connect-timeout 10"
@@ -137,12 +186,21 @@ jobs:
             ARGS="$ARGS --no-check-connectivity"
           fi
 
-          if [ "$MAX_ENTRIES" != "0" ]; then
+          # ── HTML filter ─────────────────────────────────────────────────────
+          if [ "$OK_ONLY" = "true" ]; then
+            ARGS="$ARGS --ok-only"
+          else
+            ARGS="$ARGS --no-ok-only"
+          fi
+
+          # ── Entry limit ─────────────────────────────────────────────────────
+          if [ "$MAX_ENTRIES" != "0" ] && [ -n "$MAX_ENTRIES" ]; then
             ARGS="$ARGS --max-entries $MAX_ENTRIES"
           fi
 
           # ── Run ────────────────────────────────────────────────────────────
-          PATH="$PWD/xray-bin:$PATH" python v2ray_report.py \
+          echo "Running: python v2ray_report.py $ARGS"
+          PATH="$PWD/xray-bin:$PATH" eval python v2ray_report.py \
             --output site/index.html \
             --json   site/report.json \
             $ARGS

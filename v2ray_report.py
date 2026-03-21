@@ -77,6 +77,107 @@ IPGEOLOCATION_KEYS: List[str] = [
     "42db810ae34c412e9e8f184cb47116a0",
 ]
 
+# ── ISO 3166-1 alpha-2 country code → localized name (Indonesian/English mix) ─
+# Used to translate mmdb country_code (e.g. "ID", "JP") to readable names
+COUNTRY_NAMES: Dict[str, str] = {
+    "AD": "Andorra", "AE": "Uni Emirat Arab", "AF": "Afghanistan",
+    "AG": "Antigua dan Barbuda", "AI": "Anguilla", "AL": "Albania",
+    "AM": "Armenia", "AO": "Angola", "AQ": "Antartika",
+    "AR": "Argentina", "AS": "Samoa Amerika", "AT": "Austria",
+    "AU": "Australia", "AW": "Aruba", "AX": "Kepulauan Aland",
+    "AZ": "Azerbaijan", "BA": "Bosnia dan Herzegovina", "BB": "Barbados",
+    "BD": "Bangladesh", "BE": "Belgia", "BF": "Burkina Faso",
+    "BG": "Bulgaria", "BH": "Bahrain", "BI": "Burundi",
+    "BJ": "Benin", "BL": "Saint Barthelemy", "BM": "Bermuda",
+    "BN": "Brunei", "BO": "Bolivia", "BQ": "Karibia Belanda",
+    "BR": "Brasil", "BS": "Bahama", "BT": "Bhutan",
+    "BV": "Pulau Bouvet", "BW": "Botswana", "BY": "Belarus",
+    "BZ": "Belize", "CA": "Kanada", "CC": "Kepulauan Cocos",
+    "CD": "Kongo (RDK)", "CF": "Afrika Tengah", "CG": "Kongo",
+    "CH": "Swiss", "CI": "Pantai Gading", "CK": "Kepulauan Cook",
+    "CL": "Chili", "CM": "Kamerun", "CN": "China",
+    "CO": "Kolombia", "CR": "Kosta Rika", "CU": "Kuba",
+    "CV": "Tanjung Verde", "CW": "Curacao", "CX": "Pulau Christmas",
+    "CY": "Siprus", "CZ": "Ceko", "DE": "Jerman",
+    "DJ": "Djibouti", "DK": "Denmark", "DM": "Dominika",
+    "DO": "Dominika (Rep)", "DZ": "Aljazair", "EC": "Ekuador",
+    "EE": "Estonia", "EG": "Mesir", "EH": "Sahara Barat",
+    "ER": "Eritrea", "ES": "Spanyol", "ET": "Etiopia",
+    "FI": "Finlandia", "FJ": "Fiji", "FK": "Kepulauan Falkland",
+    "FM": "Mikronesia", "FO": "Kepulauan Faroe", "FR": "Prancis",
+    "GA": "Gabon", "GB": "Inggris", "GD": "Grenada",
+    "GE": "Georgia", "GF": "Guyana Prancis", "GG": "Guernsey",
+    "GH": "Ghana", "GI": "Gibraltar", "GL": "Greenland",
+    "GM": "Gambia", "GN": "Guinea", "GP": "Guadeloupe",
+    "GQ": "Guinea Ekuatorial", "GR": "Yunani", "GS": "Georgia Selatan",
+    "GT": "Guatemala", "GU": "Guam", "GW": "Guinea-Bissau",
+    "GY": "Guyana", "HK": "Hong Kong", "HM": "Heard & McDonald",
+    "HN": "Honduras", "HR": "Kroasia", "HT": "Haiti",
+    "HU": "Hungaria", "ID": "Indonesia", "IE": "Irlandia",
+    "IL": "Israel", "IM": "Isle of Man", "IN": "India",
+    "IO": "Teritorial Samudra Hindia", "IQ": "Irak", "IR": "Iran",
+    "IS": "Islandia", "IT": "Italia", "JE": "Jersey",
+    "JM": "Jamaika", "JO": "Yordania", "JP": "Jepang",
+    "KE": "Kenya", "KG": "Kirgistan", "KH": "Kamboja",
+    "KI": "Kiribati", "KM": "Komoro", "KN": "Saint Kitts dan Nevis",
+    "KP": "Korea Utara", "KR": "Korea Selatan", "KW": "Kuwait",
+    "KY": "Kepulauan Cayman", "KZ": "Kazakhstan", "LA": "Laos",
+    "LB": "Lebanon", "LC": "Saint Lucia", "LI": "Liechtenstein",
+    "LK": "Sri Lanka", "LR": "Liberia", "LS": "Lesotho",
+    "LT": "Lituania", "LU": "Luksemburg", "LV": "Latvia",
+    "LY": "Libya", "MA": "Maroko", "MC": "Monako",
+    "MD": "Moldova", "ME": "Montenegro", "MF": "Saint Martin",
+    "MG": "Madagaskar", "MH": "Kepulauan Marshall", "MK": "Makedonia Utara",
+    "ML": "Mali", "MM": "Myanmar", "MN": "Mongolia",
+    "MO": "Makau", "MP": "Kepulauan Mariana Utara", "MQ": "Martinik",
+    "MR": "Mauritania", "MS": "Montserrat", "MT": "Malta",
+    "MU": "Mauritius", "MV": "Maladewa", "MW": "Malawi",
+    "MX": "Meksiko", "MY": "Malaysia", "MZ": "Mozambik",
+    "NA": "Namibia", "NC": "Kaledonia Baru", "NE": "Niger",
+    "NF": "Pulau Norfolk", "NG": "Nigeria", "NI": "Nikaragua",
+    "NL": "Belanda", "NO": "Norwegia", "NP": "Nepal",
+    "NR": "Nauru", "NU": "Niue", "NZ": "Selandia Baru",
+    "OM": "Oman", "PA": "Panama", "PE": "Peru",
+    "PF": "Polinesia Prancis", "PG": "Papua Nugini", "PH": "Filipina",
+    "PK": "Pakistan", "PL": "Polandia", "PM": "Saint Pierre",
+    "PN": "Kepulauan Pitcairn", "PR": "Puerto Riko", "PS": "Palestina",
+    "PT": "Portugal", "PW": "Palau", "PY": "Paraguay",
+    "QA": "Qatar", "RE": "Reunion", "RO": "Rumania",
+    "RS": "Serbia", "RU": "Rusia", "RW": "Rwanda",
+    "SA": "Arab Saudi", "SB": "Kepulauan Solomon", "SC": "Seychelles",
+    "SD": "Sudan", "SE": "Swedia", "SG": "Singapura",
+    "SH": "Saint Helena", "SI": "Slovenia", "SJ": "Svalbard",
+    "SK": "Slovakia", "SL": "Sierra Leone", "SM": "San Marino",
+    "SN": "Senegal", "SO": "Somalia", "SR": "Suriname",
+    "SS": "Sudan Selatan", "ST": "Sao Tome", "SV": "El Salvador",
+    "SX": "Sint Maarten", "SY": "Suriah", "SZ": "Eswatini",
+    "TC": "Turks dan Caicos", "TD": "Chad", "TF": "Teritorial Selatan Prancis",
+    "TG": "Togo", "TH": "Thailand", "TJ": "Tajikistan",
+    "TK": "Tokelau", "TL": "Timor-Leste", "TM": "Turkmenistan",
+    "TN": "Tunisia", "TO": "Tonga", "TR": "Turki",
+    "TT": "Trinidad dan Tobago", "TV": "Tuvalu", "TW": "Taiwan",
+    "TZ": "Tanzania", "UA": "Ukraina", "UG": "Uganda",
+    "UM": "Outlying Islands AS", "US": "Amerika Serikat", "UY": "Uruguay",
+    "UZ": "Uzbekistan", "VA": "Vatikan", "VC": "Saint Vincent",
+    "VE": "Venezuela", "VG": "Virgin Islands (UK)", "VI": "Virgin Islands (AS)",
+    "VN": "Vietnam", "VU": "Vanuatu", "WF": "Wallis dan Futuna",
+    "WS": "Samoa", "XK": "Kosovo", "YE": "Yaman",
+    "YT": "Mayotte", "ZA": "Afrika Selatan", "ZM": "Zambia",
+    "ZW": "Zimbabwe",
+}
+
+
+def resolve_country_name(code_or_name: str) -> str:
+    """Translate ISO country code to name.  Passthrough if already a full name."""
+    if not code_or_name or code_or_name == "—":
+        return code_or_name
+    v = code_or_name.strip()
+    # If it's a 2-letter uppercase code, translate it
+    if len(v) == 2 and v.isupper():
+        return COUNTRY_NAMES.get(v, v)
+    return v
+
+
 # ── Remote default sources ───────────────────────────────────────────────────
 IFCONFIG_URL = "https://ifconfig.me/ip"
 DEFAULT_VMESS_URL = (
@@ -198,24 +299,49 @@ def _load_env_value(env_path: str, key: str) -> str:
     return ""
 
 
+def _fetch_url(url: str, label: str = "") -> Tuple[str, str]:
+    """Fetch text content from a URL.  Returns (content, url) or ("", url) on error."""
+    name = label or url
+    print(f"  [fetch] {name}", file=sys.stderr)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "v2ray-report/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content = resp.read().decode("utf-8", errors="replace")
+        print(f"  [fetch] OK ({len(content)//1024} KB)", file=sys.stderr)
+        return content, url
+    except Exception as exc:
+        print(f"  [fetch] FAILED {url}: {exc}", file=sys.stderr)
+        return "", url
+
+
 def read_source(file_path: Optional[str], fallback_url: str) -> Tuple[str, str]:
-    """Read content from *file_path* if it exists, else fetch from *fallback_url*."""
-    if file_path and os.path.exists(file_path):
+    """Read configs from *file_path* (local file or URL), or fall back to *fallback_url*.
+
+    Priority:
+      1. If file_path starts with http(s)://  → fetch as URL directly
+      2. If file_path is a local path that exists → read from disk
+      3. If file_path is set but not found → warn, fall back to fallback_url
+      4. If file_path is empty/None → fetch fallback_url (script default)
+    """
+    if not file_path:
+        # No input specified → use script default URL
+        return _fetch_url(fallback_url, f"default: {fallback_url}")
+
+    if file_path.startswith(("http://", "https://")):
+        # Explicit URL passed as input
+        return _fetch_url(file_path)
+
+    if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read(), file_path
-    if file_path:
-        print(
-            f"[warn] File not found: {file_path!r}. "
-            f"Fetching from default URL: {fallback_url}",
-            file=sys.stderr,
-        )
-    try:
-        with urllib.request.urlopen(fallback_url, timeout=30) as resp:
-            content = resp.read().decode("utf-8", errors="replace")
-        return content, fallback_url
-    except Exception as exc:
-        print(f"[error] Failed to fetch {fallback_url}: {exc}", file=sys.stderr)
-        return "", fallback_url
+
+    # Local file not found → fall back to default URL
+    print(
+        f"[warn] File not found: {file_path!r}. "
+        f"Fetching from default URL: {fallback_url}",
+        file=sys.stderr,
+    )
+    return _fetch_url(fallback_url, fallback_url)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1106,7 +1232,7 @@ def parse_ipinfo_lite_response(data: Dict[str, Any]) -> Optional[Dict[str, str]]
     parts    = [p for p in (asn, domain) if p and p != "—"]
     services = " | ".join(parts) or "—"
 
-    return {"country": country, "city": city, "isp": isp,
+    return {"country": resolve_country_name(country), "city": city, "isp": isp,
             "services": services, "lookup_source": "ipinfo.io/lite"}
 
 
@@ -1211,7 +1337,7 @@ def parse_geolite2_city_record(record: Any) -> Dict[str, str]:
 
     result: Dict[str, str] = {}
     if country and country != "—":
-        result["country"] = country
+        result["country"] = resolve_country_name(country)
     result["city"] = city if city and city != "—" else "—"
     return result
 
@@ -1302,7 +1428,7 @@ def merge_mmdb_lookup(
         ver = "ipv4"
 
     return {
-        "country": country,
+        "country": resolve_country_name(country),
         "city":    city,
         "isp":     isp,
         "services": services,
@@ -1331,7 +1457,7 @@ def parse_ipinfo_mmdb_record(record: Any) -> Optional[Dict[str, str]]:
     parts  = [p for p in (asn, domain) if p and p != "—"]
 
     return {
-        "country": country,
+        "country": resolve_country_name(country),
         "city":    city,
         "isp":     isp,
         "services": " | ".join(parts) or "—",
@@ -1484,11 +1610,90 @@ def lookup_ip_info(
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# Checkpoint helpers
+# ════════════════════════════════════════════════════════════════════════════
+
+# Checkpoint file schema (JSON):
+# {
+#   "version": 1,
+#   "source_label": "...",
+#   "mode": "all",
+#   "steps_done": ["parse", "geo", "connectivity"],   # completed steps
+#   "rows": [...]
+# }
+#
+# Steps in order:
+#   parse        — token extraction + DNS resolve
+#   geo          — IP geolocation
+#   connectivity — TCP pre-filter + xray check
+
+CHECKPOINT_VERSION = 1
+STEPS_ALL = ["parse", "geo", "connectivity"]
+
+
+def ckpt_load(path: str) -> Optional[Dict[str, Any]]:
+    """Load checkpoint JSON.  Returns None if missing / incompatible."""
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return None
+        if data.get("version") != CHECKPOINT_VERSION:
+            print(f"[ckpt] Incompatible checkpoint version, ignoring: {path}", file=sys.stderr)
+            return None
+        if not isinstance(data.get("rows"), list):
+            return None
+        return data
+    except Exception as exc:
+        print(f"[ckpt] Failed to load checkpoint {path!r}: {exc}", file=sys.stderr)
+        return None
+
+
+def ckpt_save(path: str, rows: List[Dict[str, Any]], steps_done: List[str],
+              source_label: str, mode: str) -> None:
+    """Atomically write checkpoint JSON (write to tmp then rename)."""
+    if not path:
+        return
+    tmp = path + ".tmp"
+    try:
+        payload = {
+            "version": CHECKPOINT_VERSION,
+            "source_label": source_label,
+            "mode": mode,
+            "steps_done": steps_done,
+            "rows": rows,
+        }
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+        print(f"  [ckpt] Saved checkpoint ({len(rows)} rows, steps done: {steps_done})",
+              file=sys.stderr)
+    except Exception as exc:
+        print(f"[ckpt] Failed to save checkpoint {path!r}: {exc}", file=sys.stderr)
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+
+
+def ckpt_steps_done(ckpt: Optional[Dict[str, Any]]) -> List[str]:
+    if not ckpt:
+        return []
+    return list(ckpt.get("steps_done") or [])
+
+
+def ckpt_step_done(ckpt: Optional[Dict[str, Any]], step: str) -> bool:
+    return step in ckpt_steps_done(ckpt)
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # HTML report generation
 # ════════════════════════════════════════════════════════════════════════════
 
 
-def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MODE_ALL) -> str:
+def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MODE_ALL, ok_only: bool = True) -> str:
     """Generate a lightweight, virtual-scrolled HTML report.
 
     Optimisations vs the old version:
@@ -1501,10 +1706,18 @@ def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MOD
        time.  Scrolling / filtering repaints only the visible window.
     3. Debounced search input (150 ms) avoids re-filtering on every keystroke.
     """
-    countries = sorted({row.get("country", "—") for row in rows if row.get("country","—") != "—"})
+    # ── Filter rows for HTML (ok_only keeps only connectivity=ok entries) ──────
+    if ok_only:
+        html_rows = [r for r in rows if r.get("connectivity") == "ok"]
+        ok_label = " · ok only"
+    else:
+        html_rows = list(rows)
+        ok_label = ""
+
+    countries = sorted({row.get("country", "—") for row in html_rows if row.get("country","—") != "—"})
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    total_vmess = sum(1 for r in rows if r.get("protocol") == "vmess")
-    total_vless = sum(1 for r in rows if r.get("protocol") == "vless")
+    total_vmess = sum(1 for r in html_rows if r.get("protocol") == "vmess")
+    total_vless = sum(1 for r in html_rows if r.get("protocol") == "vless")
     mode_label  = {"vmess": "VMess Only", "vless": "VLess Only", "all": "VMess + VLess"}.get(mode, "All")
 
     # ── Split heavy fields out of main data array ─────────────────────────────
@@ -1515,7 +1728,7 @@ def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MOD
     HEAVY = {"original", "vmess_original", "vless_original", "decoded",
              "connectivity_detail"}
 
-    for r in rows:
+    for r in html_rows:
         uri = str(r.get("original") or r.get("vmess_original") or r.get("vless_original") or "")
         uris.append(uri)
         details.append({
@@ -1626,7 +1839,7 @@ def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MOD
 <body>
 <div class="wrap">
   <section class="hero">
-    <h1>&#128737; V2Ray Proxy Report <span style="font-size:13px;color:var(--muted);font-weight:400">({html.escape(mode_label)})</span></h1>
+    <h1>&#128737; V2Ray Proxy Report <span style="font-size:13px;color:var(--muted);font-weight:400">({html.escape(mode_label + ok_label)})</span></h1>
     <div class="meta">Source: {html.escape(source_label)} &nbsp;|&nbsp; Generated: {html.escape(now)}</div>
     <div class="stats">
       <div class="chip" id="countAll">Total: 0</div>
@@ -1954,12 +2167,13 @@ def process_content(
     abstract_key: str = "",
     mmdb_city: Any = None,
     mmdb_asn: Any = None,
+    checkpoint_path: str = "",
+    source_label: str = "",
 ) -> List[Dict[str, Any]]:
     """Full pipeline: extract → parse+DNS → geo lookup → merge.
 
-    All three I/O-heavy phases run in parallel thread pools.
-    *parse_workers* and *geo_workers* default to ``DEFAULT_PARSE_WORKERS`` /
-    ``DEFAULT_GEO_WORKERS`` when set to 0.
+    Saves a checkpoint JSON after each completed step so runs can be
+    resumed with --resume.  Pass checkpoint_path="" to disable.
     """
     tokens = extract_tokens(content, mode)
     if max_entries > 0:
@@ -1968,116 +2182,143 @@ def process_content(
     n_parse = max(1, parse_workers or DEFAULT_PARSE_WORKERS)
     n_geo   = max(1, geo_workers   or DEFAULT_GEO_WORKERS)
 
-    # ── Phase 1: Parallel parse + DNS resolve ─────────────────────────────
-    # Pre-allocate result list so we can write by index (preserves order).
-    results: List[Optional[Dict[str, Any]]] = [None] * len(tokens)
-    dns_cache: Dict[str, str] = {}
-    dns_lock  = threading.Lock()
-    completed_parse = 0
-    parse_lock = threading.Lock()
+    # ── Resume from checkpoint if available ──────────────────────────────────
+    ckpt = ckpt_load(checkpoint_path)
+    steps_done: List[str] = ckpt_steps_done(ckpt)
 
-    parse_bar = CliProgress(
-        f"Parse+Resolve (×{n_parse})", len(tokens), enabled=show_progress
-    )
-
-    def _parse_one(idx: int, token: str) -> None:
-        nonlocal completed_parse
-        item = parse_token(token)
-        ip, dns_error = resolve_ip(item.get("add", ""), dns_cache, dns_lock)
-        item["resolved_ip"] = ip
-        if dns_error:
-            item["status"] = "error"
-            if not item.get("error"):
-                item["error"] = dns_error
-        if isinstance(item.get("decoded"), dict):
-            item["decoded"] = json.dumps(
-                item["decoded"], ensure_ascii=False, separators=(",", ":")
-            )
-        results[idx] = item
-        with parse_lock:
-            completed_parse += 1
-            parse_bar.update(completed_parse)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=n_parse) as ex:
-        futs = [ex.submit(_parse_one, i, tok) for i, tok in enumerate(tokens)]
-        for f in concurrent.futures.as_completed(futs):
-            f.result()   # re-raise any unexpected exception
-
-    parse_bar.finish()
-    rows: List[Dict[str, Any]] = [r for r in results if r is not None]
-
-    # ── Phase 2: IP geolocation (deduplicated) ────────────────────────────
-    # Strategy depends on geo_provider:
-    #   offline / mmdb-only → tight sequential loop (mmdb is in-memory, ~µs/lookup;
-    #                          thread-pool overhead and GIL contention make it
-    #                          dramatically slower than a simple for-loop)
-    #   online providers    → parallel thread pool (I/O-bound; threads help)
-    key_pool   = ApiKeyPool(api_keys)
-    ip_cache:  Dict[str, Dict[str, str]] = {}
-    unique_ips = sorted({r["resolved_ip"] for r in rows if r.get("resolved_ip")})
-
-    _offline_only = (
-        geo_provider == GEO_OFFLINE
-        or (
-            geo_provider in (GEO_AUTO, GEO_FREE)
-            and (mmdb_city is not None and mmdb_city.loaded)
-            and (mmdb_asn  is not None and mmdb_asn.loaded)
-            # all online API keys exhausted / not provided → treat as offline
-            and not key_pool.has_active()
-            and not ipinfo_token
-            and not abstract_key
-        )
-    )
-
-    if _offline_only or geo_provider == GEO_OFFLINE:
-        # ── Offline: single tight loop — no thread overhead, no GIL fight ──
-        label = "IP Geo offline"
-        lookup_bar = CliProgress(label, len(unique_ips), enabled=show_progress)
-        for idx, ip in enumerate(unique_ips, start=1):
-            ip_cache[ip] = lookup_ip_info(
-                ip, key_pool, timeout, geo_provider,
-                ipinfo_token=ipinfo_token,
-                abstract_key=abstract_key,
-                mmdb_city=mmdb_city,
-                mmdb_asn=mmdb_asn,
-            )
-            lookup_bar.update(idx)
-        lookup_bar.finish()
+    if ckpt and steps_done:
+        rows = list(ckpt["rows"])
+        # Restore source_label from checkpoint when resuming
+        if not source_label:
+            source_label = ckpt.get("source_label", "")
+        already = ", ".join(steps_done)
+        remaining = [s for s in STEPS_ALL if s not in steps_done]
+        print(f"  [ckpt] Resuming — steps already done: [{already}]", file=sys.stderr)
+        print(f"  [ckpt] Steps remaining: {remaining}", file=sys.stderr)
     else:
-        # ── Online: parallel thread pool (I/O-bound HTTP calls) ─────────────
-        ip_lock           = threading.Lock()
-        geo_progress_lock = threading.Lock()
-        completed_geo     = 0
+        rows = []
+        steps_done = []
 
-        lookup_bar = CliProgress(
-            f"IP Geo (×{n_geo})", len(unique_ips), enabled=show_progress
+    # ── Phase 1: Parse + DNS resolve ─────────────────────────────────────────
+    if "parse" not in steps_done:
+        tokens = extract_tokens(content, mode)
+        if max_entries > 0:
+            tokens = tokens[:max_entries]
+
+        results: List[Optional[Dict[str, Any]]] = [None] * len(tokens)
+        dns_cache: Dict[str, str] = {}
+        dns_lock   = threading.Lock()
+        completed_parse = 0
+        parse_lock = threading.Lock()
+
+        parse_bar = CliProgress(
+            f"Parse+Resolve (×{n_parse})", len(tokens), enabled=show_progress
         )
 
-        def _geo_one(ip: str) -> None:
-            nonlocal completed_geo
-            info = lookup_ip_info(ip, key_pool, timeout, geo_provider,
-                                  ipinfo_token=ipinfo_token,
-                                  abstract_key=abstract_key,
-                                  mmdb_city=mmdb_city,
-                                  mmdb_asn=mmdb_asn)
-            with ip_lock:
-                ip_cache[ip] = info
-            with geo_progress_lock:
-                completed_geo += 1
-                lookup_bar.update(completed_geo)
+        def _parse_one(idx: int, token: str) -> None:
+            nonlocal completed_parse
+            item = parse_token(token)
+            ip, dns_error = resolve_ip(item.get("add", ""), dns_cache, dns_lock)
+            item["resolved_ip"] = ip
+            if dns_error:
+                item["status"] = "error"
+                if not item.get("error"):
+                    item["error"] = dns_error
+            if isinstance(item.get("decoded"), dict):
+                item["decoded"] = json.dumps(
+                    item["decoded"], ensure_ascii=False, separators=(",", ":")
+                )
+            results[idx] = item
+            with parse_lock:
+                completed_parse += 1
+                parse_bar.update(completed_parse)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=n_geo) as ex:
-            futs = [ex.submit(_geo_one, ip) for ip in unique_ips]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_parse) as ex:
+            futs = [ex.submit(_parse_one, i, tok) for i, tok in enumerate(tokens)]
             for f in concurrent.futures.as_completed(futs):
                 f.result()
 
-        lookup_bar.finish()
+        parse_bar.finish()
+        rows = [r for r in results if r is not None]
+        steps_done.append("parse")
+        ckpt_save(checkpoint_path, rows, steps_done, source_label, mode)
+    else:
+        print(f"  [ckpt] Skipping parse — loaded {len(rows)} rows from checkpoint",
+              file=sys.stderr)
 
-    # ── Phase 3: Merge geo into results (trivial, in-place) ───────────────
-    for item in rows:
-        ip = item.get("resolved_ip", "")
-        if ip and ip in ip_cache:
-            item.update(ip_cache[ip])
+    # ── Phase 2: IP geolocation (deduplicated) ────────────────────────────────
+    if "geo" not in steps_done:
+        key_pool   = ApiKeyPool(api_keys)
+        ip_cache:  Dict[str, Dict[str, str]] = {}
+        unique_ips = sorted({r["resolved_ip"] for r in rows if r.get("resolved_ip")})
+
+        _offline_only = (
+            geo_provider == GEO_OFFLINE
+            or (
+                geo_provider in (GEO_AUTO, GEO_FREE)
+                and (mmdb_city is not None and mmdb_city.loaded)
+                and (mmdb_asn  is not None and mmdb_asn.loaded)
+                and not key_pool.has_active()
+                and not ipinfo_token
+                and not abstract_key
+            )
+        )
+
+        if _offline_only or geo_provider == GEO_OFFLINE:
+            # ── Offline: single tight loop — no thread overhead, no GIL fight ──
+            lookup_bar = CliProgress("IP Geo offline", len(unique_ips), enabled=show_progress)
+            for idx, ip in enumerate(unique_ips, start=1):
+                ip_cache[ip] = lookup_ip_info(
+                    ip, key_pool, timeout, geo_provider,
+                    ipinfo_token=ipinfo_token,
+                    abstract_key=abstract_key,
+                    mmdb_city=mmdb_city,
+                    mmdb_asn=mmdb_asn,
+                )
+                lookup_bar.update(idx)
+            lookup_bar.finish()
+        else:
+            # ── Online: parallel thread pool (I/O-bound HTTP calls) ─────────────
+            ip_lock           = threading.Lock()
+            geo_progress_lock = threading.Lock()
+            completed_geo     = 0
+
+            lookup_bar = CliProgress(
+                f"IP Geo (×{n_geo})", len(unique_ips), enabled=show_progress
+            )
+
+            def _geo_one(ip: str) -> None:
+                nonlocal completed_geo
+                info = lookup_ip_info(ip, key_pool, timeout, geo_provider,
+                                      ipinfo_token=ipinfo_token,
+                                      abstract_key=abstract_key,
+                                      mmdb_city=mmdb_city,
+                                      mmdb_asn=mmdb_asn)
+                with ip_lock:
+                    ip_cache[ip] = info
+                with geo_progress_lock:
+                    completed_geo += 1
+                    lookup_bar.update(completed_geo)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n_geo) as ex:
+                futs = [ex.submit(_geo_one, ip) for ip in unique_ips]
+                for f in concurrent.futures.as_completed(futs):
+                    f.result()
+
+            lookup_bar.finish()
+
+        # Merge geo into rows
+        for item in rows:
+            ip = item.get("resolved_ip", "")
+            if ip and ip in ip_cache:
+                item.update(ip_cache[ip])
+
+        steps_done.append("geo")
+        ckpt_save(checkpoint_path, rows, steps_done, source_label, mode)
+    else:
+        print(f"  [ckpt] Skipping geo — already done in checkpoint", file=sys.stderr)
+
+    return rows
 
     return rows
 
@@ -2100,11 +2341,18 @@ def update_connectivity_status(
     show_progress: bool,
     tcp_timeout: float = 3.0,
     xray_semaphore_n: int = 0,
+    checkpoint_path: str = "",
+    checkpoint_source_label: str = "",
+    checkpoint_mode: str = MODE_ALL,
+    checkpoint_interval: int = 200,
 ) -> None:
     """Two-stage pipeline:
 
     Stage 1 — TCP pre-filter (socket.connect, very fast, kills dead entries early).
     Stage 2 — xray proxy check (only for TCP-reachable entries, RAM-bounded via semaphore).
+
+    Saves a rolling checkpoint every *checkpoint_interval* completed xray checks
+    so a crashed run can be resumed without losing progress.
     """
     # ---- Collect candidates -------------------------------------------------
     candidates: List[Tuple[int, str, str, str, str, int]] = []
@@ -2187,8 +2435,11 @@ def update_connectivity_status(
         f"xray check (x{n_xray}, sem={n_sem})", len(xray_candidates), enabled=show_progress
     )
 
+    _ckpt_counter   = 0
+    _ckpt_lock      = threading.Lock()
+
     def _xray_check_one(ci: int) -> None:
-        nonlocal xray_done
+        nonlocal xray_done, _ckpt_counter
         idx, token, add, ip, proto, port = candidates[ci]
         with xray_sem:                # cap live xray processes
             try:
@@ -2200,6 +2451,16 @@ def update_connectivity_status(
         with xray_lock:
             xray_done += 1
             xray_bar.update(xray_done)
+        # ── Rolling checkpoint every N completions ────────────────────────
+        if checkpoint_path and checkpoint_interval > 0:
+            with _ckpt_lock:
+                _ckpt_counter += 1
+                if _ckpt_counter % checkpoint_interval == 0:
+                    ckpt_save(
+                        checkpoint_path, rows,
+                        ["parse", "geo"],   # connectivity not yet complete
+                        checkpoint_source_label, checkpoint_mode,
+                    )
 
     if xray_candidates:
         with concurrent.futures.ThreadPoolExecutor(max_workers=n_xray) as ex:
@@ -2210,6 +2471,14 @@ def update_connectivity_status(
                 except Exception:
                     pass
     xray_bar.finish()
+
+    # ── Mark connectivity step complete ───────────────────────────────────────
+    if checkpoint_path:
+        ckpt_save(
+            checkpoint_path, rows,
+            ["parse", "geo", "connectivity"],
+            checkpoint_source_label, checkpoint_mode,
+        )
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2257,16 +2526,54 @@ def main() -> None:
     out = parser.add_argument_group("Output")
     out.add_argument("-o", "--output", default="report.html", help="Output HTML report file")
     out.add_argument("--json", default="report.json", help="Output JSON data file")
+    out.add_argument(
+        "--ok-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "HTML report includes only entries with connectivity=ok (default: enabled). "
+            "Use --no-ok-only to include all entries regardless of connectivity status."
+        ),
+    )
 
     # ── Report-only mode ──────────────────────────────────────────────────
     rpt = parser.add_argument_group("Report-only Mode")
     rpt.add_argument(
         "--report-only", action="store_true",
-        help="Generate HTML from existing JSON without re-processing configs",
+        help=(
+            "Regenerate HTML from an existing JSON file without any processing. "
+            "Automatically disables connectivity checks."
+        ),
     )
     rpt.add_argument(
         "--report-json", default="report.json",
-        help="Input JSON file when using --report-only",
+        help="Input JSON file when using --report-only (default: report.json)",
+    )
+
+    # ── Checkpoint / Resume ───────────────────────────────────────────────
+    ckpt_grp = parser.add_argument_group("Checkpoint / Resume")
+    ckpt_grp.add_argument(
+        "--checkpoint", default="checkpoint.json", metavar="FILE",
+        help=(
+            "Path to checkpoint file (default: checkpoint.json). "
+            "Checkpoint is saved after each completed step: parse, geo, connectivity. "
+            "Pass empty string '' to disable checkpointing."
+        ),
+    )
+    ckpt_grp.add_argument(
+        "--resume", action="store_true",
+        help=(
+            "Resume from an existing checkpoint file (--checkpoint path). "
+            "Already-completed steps are skipped automatically. "
+            "If no checkpoint exists the run starts fresh."
+        ),
+    )
+    ckpt_grp.add_argument(
+        "--checkpoint-interval", type=int, default=200, metavar="N",
+        help=(
+            "Save a rolling checkpoint every N completed xray checks during "
+            "connectivity phase (default: 200). Reduces data loss on crash."
+        ),
     )
 
     # ── Connectivity ──────────────────────────────────────────────────────
@@ -2458,6 +2765,9 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+    # ── Checkpoint path (empty string = disabled) ─────────────────────────
+    checkpoint_path = args.checkpoint if args.resume or args.checkpoint else ""
+
     # ── Report-only mode ──────────────────────────────────────────────────
     if args.report_only:
         if not os.path.exists(args.report_json):
@@ -2513,18 +2823,33 @@ def main() -> None:
             abstract_key=abstract_key,
             mmdb_city=mmdb_city,
             mmdb_asn=mmdb_asn,
+            checkpoint_path=checkpoint_path,
+            source_label=source_label,
         )
 
     # ── Connectivity check ────────────────────────────────────────────────
-    if args.check_connectivity:
-        update_connectivity_status(
-            rows,
-            timeout=max(0.1, args.connect_timeout),
-            workers=max(1, args.connect_workers),
-            show_progress=show_progress,
-            tcp_timeout=max(0.1, args.tcp_timeout),
-            xray_semaphore_n=max(1, args.xray_semaphore),
-        )
+    # --report-only = regenerate HTML only; never re-run connectivity checks
+    # Skip connectivity if already done in checkpoint
+    _ckpt_for_conn = ckpt_load(checkpoint_path) if checkpoint_path else None
+    _conn_done_in_ckpt = ckpt_step_done(_ckpt_for_conn, "connectivity")
+
+    if args.check_connectivity and not args.report_only:
+        if _conn_done_in_ckpt:
+            print("  [ckpt] Skipping connectivity — already done in checkpoint",
+                  file=sys.stderr)
+        else:
+            update_connectivity_status(
+                rows,
+                timeout=max(0.1, args.connect_timeout),
+                workers=max(1, args.connect_workers),
+                show_progress=show_progress,
+                tcp_timeout=max(0.1, args.tcp_timeout),
+                xray_semaphore_n=max(1, args.xray_semaphore),
+                checkpoint_path=checkpoint_path,
+                checkpoint_source_label=source_label,
+                checkpoint_mode=mode,
+                checkpoint_interval=args.checkpoint_interval,
+            )
 
     # ── Write JSON ────────────────────────────────────────────────────────
     json_path = args.report_json if args.report_only else args.json
@@ -2532,7 +2857,7 @@ def main() -> None:
         json.dump(rows, jf, ensure_ascii=False, indent=2)
 
     # ── Write HTML ────────────────────────────────────────────────────────
-    html_text = generate_html(rows, source_label, mode)
+    html_text = generate_html(rows, source_label, mode, ok_only=args.ok_only)
     with open(args.output, "w", encoding="utf-8") as hf:
         hf.write(html_text)
 
@@ -2562,7 +2887,7 @@ def main() -> None:
     print(f"  xray semaphore   : {args.xray_semaphore}  (max live xray procs)")
     print(f"  Total            : {len(rows)}  (VMess: {vmess_count}, VLess: {vless_count})")
     print(f"  Connectivity     : {ok_count} ok / {len(rows) - ok_count} not-ok")
-    print(f"  HTML report      : {args.output}")
+    print(f"  HTML report      : {args.output}  (ok-only: {args.ok_only})")
     print(f"  JSON data        : {json_path}")
     print(f"{'-'*54}\n")
 
