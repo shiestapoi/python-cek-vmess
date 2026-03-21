@@ -18,6 +18,8 @@ on:
       vmess_url:
         description: |
           VMess config source URL (optional).
+          Leave empty to use script default:
+          https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/.../vmess_configs.txt
         required: false
         type: string
         default: ""
@@ -25,6 +27,8 @@ on:
       vless_url:
         description: |
           VLess config source URL (optional).
+          Leave empty to use script default:
+          https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/.../vless_configs.txt
         required: false
         type: string
         default: ""
@@ -60,6 +64,12 @@ on:
         type: string
         default: "0"
 
+      generate_preview:
+        description: "Generate og:image preview screenshot after building HTML"
+        required: true
+        type: boolean
+        default: true
+
 permissions:
   contents: write
   pages: write
@@ -83,6 +93,9 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+
+      - name: Install Playwright browser (for preview screenshot)
+        run: playwright install chromium --with-deps
 
       - name: Install system tools
         run: sudo apt-get update && sudo apt-get install -y curl unzip
@@ -139,6 +152,10 @@ jobs:
           MAX_ENTRIES:  ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries   || '0'    }}
           VMESS_URL:    ${{ github.event_name == 'workflow_dispatch' && inputs.vmess_url     || ''     }}
           VLESS_URL:    ${{ github.event_name == 'workflow_dispatch' && inputs.vless_url     || ''     }}
+          GEN_PREVIEW:  ${{ github.event_name != 'workflow_dispatch' || inputs.generate_preview }}
+          # Pages URL = https://<owner>.github.io/<repo>/
+          # Constructed from github.repository: "owner/repo"
+          PAGES_URL:    https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
         run: |
           # ── Write .env for secret injection ────────────────────────────────
           {
@@ -197,12 +214,27 @@ jobs:
           # ── Run ────────────────────────────────────────────────────────────
           echo "Running: python v2ray_report.py $ARGS"
           PATH="$PWD/xray-bin:$PATH" eval python v2ray_report.py \
-            --output site/index.html \
-            --json   site/report.json \
+            --output   site/index.html \
+            --json     site/report.json \
+            --page-url "${PAGES_URL}" \
+            --og-image "${PAGES_URL}preview.png" \
             $ARGS
 
           # ── Cleanup .env so it's never uploaded ────────────────────────────
           rm -f .env
+
+          # ── Generate OG preview image ───────────────────────────────────────
+          if [ "$GEN_PREVIEW" = "true" ]; then
+            echo "Generating preview screenshot..."
+            python generate_preview.py \
+              --input  site/index.html \
+              --output site/preview.png \
+              --width  1200 \
+              --height 630
+            echo "Preview: $(du -sh site/preview.png 2>/dev/null || echo 'not generated')"
+          else
+            echo "Preview generation skipped (generate_preview=false)"
+          fi
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

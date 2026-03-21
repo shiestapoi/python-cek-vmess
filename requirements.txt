@@ -12,3 +12,8 @@
 # Enables --geo-provider offline and GeoLite2 mmdb fallback in auto/free mode.
 # MMDB files are auto-downloaded from sapics/ip-location-db on first run.
 maxminddb>=2.0.0
+
+# ── Optional: OG preview image generation (generate_preview.py) ──────────────
+# Captures an exact screenshot of the HTML report for social media previews.
+# After install, also run: playwright install chromium --with-deps
+playwright>=1.40.0

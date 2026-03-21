@@ -1752,7 +1752,7 @@ def ckpt_step_done(ckpt: Optional[Dict[str, Any]], step: str) -> bool:
 # ════════════════════════════════════════════════════════════════════════════
 
 
-def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MODE_ALL, ok_only: bool = True) -> str:
+def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MODE_ALL, ok_only: bool = True, og_image_url: str = "", page_url: str = "") -> str:
     """Generate a lightweight, virtual-scrolled HTML report.
 
     Optimisations vs the old version:
@@ -1801,12 +1801,48 @@ def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MOD
     details_json = json.dumps(details,   ensure_ascii=False, separators=(",", ":"))
     countries_json = json.dumps(countries, ensure_ascii=False)
 
+    # ── Build Open Graph / Twitter Card meta tags ─────────────────────────────
+    _ok_rows  = [r for r in rows if r.get("connectivity") == "ok"] if ok_only else rows
+    _ok_count = len(_ok_rows)
+    _countries = len({r.get("country","") for r in _ok_rows if r.get("country","")})
+    _desc = (
+        f"{_ok_count} working proxies across {_countries} countries "
+        f"({total_vmess} VMess + {total_vless} VLess{ok_label})"
+    )
+    _og_title = f"V2Ray Proxy Report · {mode_label}"
+    _canonical = html.escape(page_url) if page_url else ""
+    _og_img    = html.escape(og_image_url) if og_image_url else ""
+
+    _og_meta = ""
+    # Always add basic meta
+    _og_meta += f'''  <meta name="description" content="{html.escape(_desc)}"/>\n'''
+    if _canonical:
+        _og_meta += f'''  <link rel="canonical" href="{_canonical}"/>\n'''
+    # Open Graph (Facebook, LinkedIn, Discord, Telegram, WhatsApp)
+    _og_meta += f'''  <meta property="og:type"        content="website"/>\n'''
+    _og_meta += f'''  <meta property="og:title"       content="{html.escape(_og_title)}"/>\n'''
+    _og_meta += f'''  <meta property="og:description" content="{html.escape(_desc)}"/>\n'''
+    if _canonical:
+        _og_meta += f'''  <meta property="og:url"        content="{_canonical}"/>\n'''
+    if _og_img:
+        _og_meta += f'''  <meta property="og:image"      content="{_og_img}"/>\n'''
+        _og_meta += f'''  <meta property="og:image:width"  content="1200"/>\n'''
+        _og_meta += f'''  <meta property="og:image:height" content="630"/>\n'''
+    # Twitter Card
+    _tw_card = "summary_large_image" if _og_img else "summary"
+    _og_meta += f'''  <meta name="twitter:card"        content="{_tw_card}"/>\n'''
+    _og_meta += f'''  <meta name="twitter:title"       content="{html.escape(_og_title)}"/>\n'''
+    _og_meta += f'''  <meta name="twitter:description" content="{html.escape(_desc)}"/>\n'''
+    if _og_img:
+        _og_meta += f'''  <meta name="twitter:image"      content="{_og_img}"/>\n'''
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>V2Ray Proxy Report</title>
+{_og_meta}
   <style>
     :root{{
       --bg:#0b111b;--bg-alt:#121b2a;--panel:#111827;
@@ -2594,6 +2630,22 @@ def main() -> None:
             "Use --no-ok-only to include all entries regardless of connectivity status."
         ),
     )
+    out.add_argument(
+        "--og-image", default="", metavar="URL",
+        help=(
+            "Absolute URL for the og:image preview (e.g. https://user.github.io/repo/preview.png). "
+            "Used for social media link previews (Open Graph + Twitter Card). "
+            "Generate the image with generate_preview.py after building the HTML."
+        ),
+    )
+    out.add_argument(
+        "--page-url", default="", metavar="URL",
+        help=(
+            "Canonical public URL of this report page "
+            "(e.g. https://user.github.io/repo/). "
+            "Used for og:url and rel=canonical tags."
+        ),
+    )
 
     # ── Report-only mode ──────────────────────────────────────────────────
     rpt = parser.add_argument_group("Report-only Mode")
@@ -2842,6 +2894,20 @@ def main() -> None:
             print("[error] Invalid report JSON: expected a list of objects.", file=sys.stderr)
             sys.exit(1)
         rows = [r for r in rows if isinstance(r, dict)]
+
+        # ── Auto-translate any country codes still present in JSON ────────────
+        translated = 0
+        for row in rows:
+            raw = str(row.get("country") or "")
+            if raw and raw != "—":
+                resolved = resolve_country_name(raw)
+                if resolved != raw:
+                    row["country"] = resolved
+                    translated += 1
+        if translated:
+            print(f"  [report-only] Translated {translated} country code(s) to full names",
+                  file=sys.stderr)
+
         source_label = args.report_json
 
     # ── Full processing mode ──────────────────────────────────────────────
@@ -2916,7 +2982,7 @@ def main() -> None:
         json.dump(rows, jf, ensure_ascii=False, indent=2)
 
     # ── Write HTML ────────────────────────────────────────────────────────
-    html_text = generate_html(rows, source_label, mode, ok_only=args.ok_only)
+    html_text = generate_html(rows, source_label, mode, ok_only=args.ok_only, og_image_url=args.og_image, page_url=args.page_url)
     with open(args.output, "w", encoding="utf-8") as hf:
         hf.write(html_text)
 
