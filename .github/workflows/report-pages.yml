@@ -1,17 +1,38 @@
-name: Build And Deploy VMess Report
+name: Build And Deploy V2Ray Report
 
 on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Protocol mode to process"
+        required: true
+        type: choice
+        options:
+          - all
+          - vmess
+          - vless
+        default: all
+      geo_provider:
+        description: "Geolocation provider strategy"
+        required: true
+        type: choice
+        options:
+          - auto
+          - free
+          - offline
+          - apikey
+          - ipinfo
+          - abstract
+        default: auto
       check_connectivity:
-        description: "Run connectivity checks with xray"
+        description: "Run connectivity checks via xray"
         required: true
         type: boolean
         default: true
       max_entries:
-        description: "Max VMess entries to process (0 = all)"
+        description: "Max entries to process per protocol (0 = all)"
         required: true
         type: string
         default: "0"
@@ -37,34 +58,119 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
       - name: Install system tools
         run: sudo apt-get update && sudo apt-get install -y curl unzip
 
       - name: Install xray
         run: |
-          curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          curl -fsSL -o xray.zip \
+            https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           unzip -o xray.zip -d xray-bin
           chmod +x xray-bin/xray
-          ./xray-bin/xray version
+          echo "xray version: $(./xray-bin/xray version | head -1)"
+
+      # Cache GeoLite2 mmdb files — refreshed weekly (Sunday midnight UTC)
+      # Files are also auto-downloaded by the script if cache misses.
+      - name: Cache GeoLite2 mmdb files
+        uses: actions/cache@v4
+        with:
+          path: |
+            geolite2-city-ipv4.mmdb
+            geolite2-city-ipv6.mmdb
+            geolite2-asn-ipv4.mmdb
+            geolite2-asn-ipv6.mmdb
+          key: geolite2-mmdb-${{ env.WEEK }}
+          restore-keys: geolite2-mmdb-
+        env:
+          WEEK: ${{ format('{0}-W{1}', github.run_id && 'run' || 'cache', '0') }}
+
+      # Real weekly cache key derived from date
+      - name: Set mmdb cache week key
+        id: mmdb-week
+        run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GeoLite2 mmdb (weekly refresh)
+        uses: actions/cache@v4
+        id: mmdb-cache
+        with:
+          path: |
+            geolite2-city-ipv4.mmdb
+            geolite2-city-ipv6.mmdb
+            geolite2-asn-ipv4.mmdb
+            geolite2-asn-ipv6.mmdb
+          key: geolite2-mmdb-${{ steps.mmdb-week.outputs.week }}
+          restore-keys: |
+            geolite2-mmdb-
+
+      - name: Download mmdb files (cache miss)
+        if: steps.mmdb-cache.outputs.cache-hit != 'true'
+        run: |
+          BASE="https://raw.githubusercontent.com/sapics/ip-location-db/refs/heads/main"
+          declare -A FILES=(
+            ["geolite2-city-ipv4.mmdb"]="$BASE/geolite2-city-mmdb/geolite2-city-ipv4.mmdb"
+            ["geolite2-city-ipv6.mmdb"]="$BASE/geolite2-city-mmdb/geolite2-city-ipv6.mmdb"
+            ["geolite2-asn-ipv4.mmdb"] ="$BASE/geolite2-asn-mmdb/geolite2-asn-ipv4.mmdb"
+            ["geolite2-asn-ipv6.mmdb"] ="$BASE/geolite2-asn-mmdb/geolite2-asn-ipv6.mmdb"
+          )
+          for FILE in "${!FILES[@]}"; do
+            URL="${FILES[$FILE]}"
+            echo "Downloading $FILE ..."
+            curl -fsSL -o "$FILE" "$URL" && \
+              echo "  OK ($(du -sh "$FILE" | cut -f1))" || \
+              echo "  FAILED (will retry via script)"
+          done
 
       - name: Prepare output directory
         run: mkdir -p site
 
       - name: Generate report
         env:
-          MAX_ENTRIES: ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries || '0' }}
-          CHECK_CONNECTIVITY: ${{ github.event_name != 'workflow_dispatch' || inputs.check_connectivity }}
+          IPGEOLOCATION_API_KEYS: ${{ secrets.IPGEOLOCATION_API_KEYS }}
+          IPINFO_TOKEN:           ${{ secrets.IPINFO_TOKEN }}
+          ABSTRACTAPI_KEY:        ${{ secrets.ABSTRACTAPI_KEY }}
+          MODE:             ${{ github.event_name == 'workflow_dispatch' && inputs.mode          || 'all'  }}
+          GEO_PROVIDER:     ${{ github.event_name == 'workflow_dispatch' && inputs.geo_provider  || 'auto' }}
+          CHECK_CONN:       ${{ github.event_name != 'workflow_dispatch' || inputs.check_connectivity }}
+          MAX_ENTRIES:      ${{ github.event_name == 'workflow_dispatch' && inputs.max_entries   || '0'   }}
         run: |
+          # ── Write .env for secret injection ────────────────────────────────
+          {
+            [ -n "$IPGEOLOCATION_API_KEYS" ] && \
+              echo "IPGEOLOCATION_API_KEYS=$IPGEOLOCATION_API_KEYS"
+            [ -n "$IPINFO_TOKEN"  ]          && echo "IPINFO_TOKEN=$IPINFO_TOKEN"
+            [ -n "$ABSTRACTAPI_KEY" ]        && echo "ABSTRACTAPI_KEY=$ABSTRACTAPI_KEY"
+          } > .env
+
+          # ── Build argument list ─────────────────────────────────────────────
           ARGS="--no-progress"
-          if [ "$CHECK_CONNECTIVITY" = "true" ]; then
-            ARGS="$ARGS --check-connectivity --connect-timeout 10 --connect-workers 40"
+          ARGS="$ARGS --mode $MODE"
+          ARGS="$ARGS --geo-provider $GEO_PROVIDER"
+
+          if [ "$CHECK_CONN" = "true" ]; then
+            ARGS="$ARGS --check-connectivity"
+            ARGS="$ARGS --connect-timeout 10"
+            ARGS="$ARGS --tcp-timeout 3"
+            ARGS="$ARGS --connect-workers 200"
+            ARGS="$ARGS --xray-semaphore 40"
           else
             ARGS="$ARGS --no-check-connectivity"
           fi
+
           if [ "$MAX_ENTRIES" != "0" ]; then
             ARGS="$ARGS --max-entries $MAX_ENTRIES"
           fi
-          PATH="$PWD/xray-bin:$PATH" python proxy_checker.py --output site/index.html --json site/report.json $ARGS
+
+          # ── Run ────────────────────────────────────────────────────────────
+          PATH="$PWD/xray-bin:$PATH" python v2ray_report.py \
+            --output site/index.html \
+            --json   site/report.json \
+            $ARGS
+
+          # ── Cleanup .env so it's never uploaded ────────────────────────────
+          rm -f .env
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -93,11 +199,15 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           current_desc=$(gh api "repos/$REPO" --jq '.description // ""')
-          clean_desc=$(python -c "import re,sys; s=sys.argv[1]; print(re.sub(r'\s*\|\s*Pages:\s*https?://\S+','',s).strip())" "$current_desc")
+          clean_desc=$(python -c "
+          import re, sys
+          s = sys.argv[1]
+          print(re.sub(r'\s*\|\s*Pages:\s*https?://\S+', '', s).strip())
+          " "$current_desc")
           if [ -n "$clean_desc" ]; then
             new_desc="$clean_desc | Pages: $PAGE_URL"
           else
             new_desc="Pages: $PAGE_URL"
           fi
           gh api -X PATCH "repos/$REPO" -f description="$new_desc"
-          echo "Repository description updated: $new_desc"
+          echo "Updated description: $new_desc"

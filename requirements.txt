@@ -1,0 +1,14 @@
+# v2ray_report.py — Python dependencies
+#
+# All standard-library packages (argparse, base64, concurrent.futures,
+# datetime, html, ipaddress, json, os, re, shutil, socket, subprocess,
+# sys, tempfile, threading, time, urllib.*) need no installation.
+#
+# Runtime system tools required (not pip packages):
+#   curl   — for all HTTP geo-API calls
+#   xray   — for proxy connectivity checks (optional; skipped if absent)
+#
+# ── Optional: offline MMDB lookup ────────────────────────────────────────────
+# Enables --geo-provider offline and GeoLite2 mmdb fallback in auto/free mode.
+# MMDB files are auto-downloaded from sapics/ip-location-db on first run.
+maxminddb>=2.0.0
