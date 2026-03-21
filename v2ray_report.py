@@ -43,14 +43,25 @@ def _cpu_count() -> int:
 # Sensible default worker counts derived from CPU count.
 # These can all be overridden via CLI flags.
 _CPUS = _cpu_count()
-DEFAULT_PARSE_WORKERS   = min(_CPUS * 16, 512)   # DNS  - pure I/O, many threads
-DEFAULT_GEO_WORKERS     = min(_CPUS * 16, 512)   # HTTP - pure I/O, many threads
-# Connectivity uses a 2-stage pipeline:
-#   Stage-1: TCP pre-filter  (socket.connect only, flood with threads)
-#   Stage-2: xray check      (heavy subprocess, semaphore caps live procs)
-DEFAULT_TCP_WORKERS     = min(_CPUS * 64, 1024)  # stage-1: just socket.connect
-DEFAULT_CONNECT_WORKERS = min(_CPUS * 64, 1024)  # stage-2 thread count
-DEFAULT_XRAY_SEMAPHORE  = min(_CPUS * 8,   128)  # max simultaneous live xray procs
+
+# ── Default worker counts — NO artificial caps, scales with hardware ──────────
+# All values are multiplied from CPU count; Python's ThreadPoolExecutor handles
+# I/O-bound threads efficiently well beyond CPU count.
+# Users can always reduce these via CLI flags if needed.
+#
+# Thread type   │ Why high?
+# ──────────────┼──────────────────────────────────────────────────────────────
+# PARSE/DNS     │ Pure I/O (getaddrinfo blocks), GIL released during syscall
+# GEO HTTP      │ Pure I/O (curl subprocess), no GIL contention
+# TCP pre-filter│ Pure I/O (socket.connect), hundreds are fine
+# CONNECT       │ Thread pool wrapper for xray procs; actual procs capped by SEM
+# XRAY_SEM      │ Actual live xray processes; each uses ~30-50 MB RAM
+
+DEFAULT_PARSE_WORKERS   = _CPUS * 32   # DNS + parse: pure I/O
+DEFAULT_GEO_WORKERS     = _CPUS * 32   # HTTP geo calls: pure I/O
+DEFAULT_TCP_WORKERS     = _CPUS * 128  # socket.connect stage-1: pure I/O
+DEFAULT_CONNECT_WORKERS = _CPUS * 128  # thread pool for stage-2 xray
+DEFAULT_XRAY_SEMAPHORE  = _CPUS * 16   # live xray procs (~40 MB RAM each)
 
 
 # ── Regex patterns ──────────────────────────────────────────────────────────
@@ -572,7 +583,7 @@ def run_curl_json(url: str, timeout: float) -> Optional[Dict[str, Any]]:
     cmd = [
         "curl", "-sS", "-X", "GET",
         "--max-time", f"{max(1.0, timeout)}",
-        "--connect-timeout", f"{max(1.0, min(8.0, timeout))}",
+        "--connect-timeout", f"{max(0.5, timeout)}",
         url,
     ]
     try:
@@ -597,7 +608,7 @@ def run_curl_text(
     cmd = [
         "curl", "-sS", "-L", "-X", "GET",
         "--max-time", f"{max(1.0, timeout)}",
-        "--connect-timeout", f"{max(1.0, min(8.0, timeout))}",
+        "--connect-timeout", f"{max(0.5, timeout)}",
     ]
     if proxy:
         cmd.extend(["--proxy", proxy])
@@ -661,7 +672,7 @@ def _xray_check(
 
             ok, body, err = run_curl_text(
                 IFCONFIG_URL,
-                timeout=max(2.0, min(10.0, timeout)),
+                timeout=max(0.5, timeout),
                 proxy=f"socks5h://127.0.0.1:{socks_port}",
             )
             if not ok:
@@ -1335,7 +1346,7 @@ def _fetch_json_bearer(url: str, token: str, timeout: float) -> Optional[Dict[st
     cmd = [
         "curl", "-sS", "-X", "GET",
         "--max-time",        f"{max(1.0, timeout)}",
-        "--connect-timeout", f"{max(1.0, min(8.0, timeout))}",
+        "--connect-timeout", f"{max(0.5, timeout)}",
         "-H", f"Authorization: Bearer {token}",
         url,
     ]
@@ -1995,37 +2006,72 @@ def process_content(
     parse_bar.finish()
     rows: List[Dict[str, Any]] = [r for r in results if r is not None]
 
-    # ── Phase 2: Parallel IP geolocation (deduplicated) ───────────────────
+    # ── Phase 2: IP geolocation (deduplicated) ────────────────────────────
+    # Strategy depends on geo_provider:
+    #   offline / mmdb-only → tight sequential loop (mmdb is in-memory, ~µs/lookup;
+    #                          thread-pool overhead and GIL contention make it
+    #                          dramatically slower than a simple for-loop)
+    #   online providers    → parallel thread pool (I/O-bound; threads help)
     key_pool   = ApiKeyPool(api_keys)
     ip_cache:  Dict[str, Dict[str, str]] = {}
-    ip_lock    = threading.Lock()
     unique_ips = sorted({r["resolved_ip"] for r in rows if r.get("resolved_ip")})
-    completed_geo = 0
-    geo_progress_lock = threading.Lock()
 
-    lookup_bar = CliProgress(
-        f"IP Geo (×{n_geo})", len(unique_ips), enabled=show_progress
+    _offline_only = (
+        geo_provider == GEO_OFFLINE
+        or (
+            geo_provider in (GEO_AUTO, GEO_FREE)
+            and (mmdb_city is not None and mmdb_city.loaded)
+            and (mmdb_asn  is not None and mmdb_asn.loaded)
+            # all online API keys exhausted / not provided → treat as offline
+            and not key_pool.has_active()
+            and not ipinfo_token
+            and not abstract_key
+        )
     )
 
-    def _geo_one(ip: str) -> None:
-        nonlocal completed_geo
-        info = lookup_ip_info(ip, key_pool, timeout, geo_provider,
-                              ipinfo_token=ipinfo_token,
-                              abstract_key=abstract_key,
-                              mmdb_city=mmdb_city,
-                              mmdb_asn=mmdb_asn)
-        with ip_lock:
-            ip_cache[ip] = info
-        with geo_progress_lock:
-            completed_geo += 1
-            lookup_bar.update(completed_geo)
+    if _offline_only or geo_provider == GEO_OFFLINE:
+        # ── Offline: single tight loop — no thread overhead, no GIL fight ──
+        label = "IP Geo offline"
+        lookup_bar = CliProgress(label, len(unique_ips), enabled=show_progress)
+        for idx, ip in enumerate(unique_ips, start=1):
+            ip_cache[ip] = lookup_ip_info(
+                ip, key_pool, timeout, geo_provider,
+                ipinfo_token=ipinfo_token,
+                abstract_key=abstract_key,
+                mmdb_city=mmdb_city,
+                mmdb_asn=mmdb_asn,
+            )
+            lookup_bar.update(idx)
+        lookup_bar.finish()
+    else:
+        # ── Online: parallel thread pool (I/O-bound HTTP calls) ─────────────
+        ip_lock           = threading.Lock()
+        geo_progress_lock = threading.Lock()
+        completed_geo     = 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=n_geo) as ex:
-        futs = [ex.submit(_geo_one, ip) for ip in unique_ips]
-        for f in concurrent.futures.as_completed(futs):
-            f.result()
+        lookup_bar = CliProgress(
+            f"IP Geo (×{n_geo})", len(unique_ips), enabled=show_progress
+        )
 
-    lookup_bar.finish()
+        def _geo_one(ip: str) -> None:
+            nonlocal completed_geo
+            info = lookup_ip_info(ip, key_pool, timeout, geo_provider,
+                                  ipinfo_token=ipinfo_token,
+                                  abstract_key=abstract_key,
+                                  mmdb_city=mmdb_city,
+                                  mmdb_asn=mmdb_asn)
+            with ip_lock:
+                ip_cache[ip] = info
+            with geo_progress_lock:
+                completed_geo += 1
+                lookup_bar.update(completed_geo)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_geo) as ex:
+            futs = [ex.submit(_geo_one, ip) for ip in unique_ips]
+            for f in concurrent.futures.as_completed(futs):
+                f.result()
+
+        lookup_bar.finish()
 
     # ── Phase 3: Merge geo into results (trivial, in-place) ───────────────
     for item in rows:
@@ -2243,16 +2289,16 @@ def main() -> None:
         "--connect-workers", type=int, default=DEFAULT_CONNECT_WORKERS,
         help=(
             f"Thread pool for stage-2 xray checks "
-            f"(default: {DEFAULT_CONNECT_WORKERS}, auto=CPU*64). "
-            "Actual live xray procs capped by --xray-semaphore."
+            f"(default: {DEFAULT_CONNECT_WORKERS} = CPU×128). "
+            "Actual simultaneous xray procs capped by --xray-semaphore. No upper cap."
         ),
     )
     conn.add_argument(
         "--xray-semaphore", type=int, default=DEFAULT_XRAY_SEMAPHORE,
         help=(
             f"Max simultaneous live xray processes "
-            f"(default: {DEFAULT_XRAY_SEMAPHORE}, auto=CPU*8). "
-            "Each xray proc uses ~30-50 MB RAM; raise for faster checks if RAM allows."
+            f"(default: {DEFAULT_XRAY_SEMAPHORE} = CPU×16). "
+            "Each xray proc uses ~30-50 MB RAM. Raise freely if RAM allows. No upper cap."
         ),
     )
 
@@ -2261,15 +2307,15 @@ def main() -> None:
     perf.add_argument(
         "--parse-workers", type=int, default=DEFAULT_PARSE_WORKERS,
         help=(
-            f"Threads for parallel parse+DNS phase (default: {DEFAULT_PARSE_WORKERS}, "
-            f"auto = CPU×8). DNS is I/O-bound so high counts help."
+            f"Threads for parse+DNS phase (default: {DEFAULT_PARSE_WORKERS} = CPU×32). "
+            "DNS is pure I/O; very high thread counts work well. No upper cap."
         ),
     )
     perf.add_argument(
         "--geo-workers", type=int, default=DEFAULT_GEO_WORKERS,
         help=(
-            f"Threads for parallel geo/IP lookup phase (default: {DEFAULT_GEO_WORKERS}, "
-            f"auto = CPU×8). Each worker makes independent HTTP calls."
+            f"Threads for geo/IP lookup phase (default: {DEFAULT_GEO_WORKERS} = CPU×32). "
+            "Each worker makes independent HTTP calls. No upper cap."
         ),
     )
 
@@ -2473,10 +2519,10 @@ def main() -> None:
     if args.check_connectivity:
         update_connectivity_status(
             rows,
-            timeout=max(1.0, args.connect_timeout),
+            timeout=max(0.1, args.connect_timeout),
             workers=max(1, args.connect_workers),
             show_progress=show_progress,
-            tcp_timeout=max(0.5, args.tcp_timeout),
+            tcp_timeout=max(0.1, args.tcp_timeout),
             xray_semaphore_n=max(1, args.xray_semaphore),
         )
 
