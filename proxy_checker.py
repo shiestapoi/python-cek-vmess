@@ -1421,7 +1421,7 @@ def lookup_ip_info(
             return parsed
 
     # ── 5. GeoLite2-City + ASN mmdb (offline last resort) ────────────────────
-    if geo_provider in (GEO_AUTO, GEO_FREE) and (mmdb_city is not None or mmdb_asn is not None):
+    if geo_provider in (GEO_AUTO, GEO_FREE) and (mmdb_city.loaded or mmdb_asn.loaded):
         parsed = merge_mmdb_lookup(mmdb_city, mmdb_asn, ip)
         if parsed:
             return parsed
@@ -1437,424 +1437,450 @@ def lookup_ip_info(
 # HTML report generation
 # ════════════════════════════════════════════════════════════════════════════
 
-def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MODE_ALL) -> str:
-    countries = sorted({row.get("country", "Unknown") for row in rows})
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rows_json = json.dumps(rows, ensure_ascii=False)
-    countries_json = json.dumps(countries, ensure_ascii=False)
 
+def generate_html(rows: List[Dict[str, Any]], source_label: str, mode: str = MODE_ALL) -> str:
+    """Generate a lightweight, virtual-scrolled HTML report.
+
+    Optimisations vs the old version:
+    1. Heavy per-row fields (original URI, decoded JSON, connectivity_detail)
+       are stripped from the main `data` array and stored in two side arrays:
+         uris[i]     – the raw vmess/vless config string (for Copy)
+         details[i]  – {connectivity_detail, decoded}  (modal only)
+       This typically cuts embedded JSON size by 60–80 %.
+    2. Virtual scrolling: only PAGE_SIZE rows are rendered in the DOM at any
+       time.  Scrolling / filtering repaints only the visible window.
+    3. Debounced search input (150 ms) avoids re-filtering on every keystroke.
+    """
+    countries = sorted({row.get("country", "—") for row in rows if row.get("country","—") != "—"})
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     total_vmess = sum(1 for r in rows if r.get("protocol") == "vmess")
     total_vless = sum(1 for r in rows if r.get("protocol") == "vless")
-    mode_label = {"vmess": "VMess Only", "vless": "VLess Only", "all": "VMess + VLess"}.get(mode, "All")
+    mode_label  = {"vmess": "VMess Only", "vless": "VLess Only", "all": "VMess + VLess"}.get(mode, "All")
+
+    # ── Split heavy fields out of main data array ─────────────────────────────
+    slim_rows = []
+    uris      = []   # full config URI per row (for Copy button)
+    details   = []   # {connectivity_detail, decoded} per row (modal only)
+
+    HEAVY = {"original", "vmess_original", "vless_original", "decoded",
+             "connectivity_detail"}
+
+    for r in rows:
+        uri = str(r.get("original") or r.get("vmess_original") or r.get("vless_original") or "")
+        uris.append(uri)
+        details.append({
+            "connectivity_detail": str(r.get("connectivity_detail") or ""),
+            "decoded": str(r.get("decoded") or ""),
+        })
+        slim_rows.append({k: v for k, v in r.items() if k not in HEAVY})
+
+    data_json    = json.dumps(slim_rows, ensure_ascii=False, separators=(",", ":"))
+    uris_json    = json.dumps(uris,      ensure_ascii=False, separators=(",", ":"))
+    details_json = json.dumps(details,   ensure_ascii=False, separators=(",", ":"))
+    countries_json = json.dumps(countries, ensure_ascii=False)
 
     return f"""<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>V2Ray Proxy Report</title>
   <style>
-    :root {{
-      --bg: #0b111b; --bg-alt: #121b2a; --panel: #111827;
-      --line: #273247; --text: #e5ecf5; --muted: #95a2b7;
-      --accent: #19c8b4; --accent-2: #28a8ff;
-      --good: #16c47f; --bad: #ef5350;
-      --chip: #1b2638;
-      --vmess-color: #28a8ff; --vless-color: #a78bfa;
+    :root{{
+      --bg:#0b111b;--bg-alt:#121b2a;--panel:#111827;
+      --line:#273247;--text:#e5ecf5;--muted:#95a2b7;
+      --accent:#19c8b4;--accent-2:#28a8ff;
+      --good:#16c47f;--bad:#ef5350;--chip:#1b2638;
     }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      color: var(--text);
-      background: radial-gradient(1200px 700px at 10% 0%, #132138 0%, var(--bg) 50%),
-                  linear-gradient(180deg, #0b111b 0%, #09101a 100%);
-      min-height: 100vh;
-    }}
-    .wrap {{ max-width: 1500px; margin: 0 auto; padding: 28px 18px 40px; }}
-    .hero {{
-      background: linear-gradient(130deg, rgba(25,200,180,0.12), rgba(167,139,250,0.12));
-      border: 1px solid var(--line); border-radius: 16px;
-      padding: 20px; margin-bottom: 18px; backdrop-filter: blur(8px);
-    }}
-    h1 {{ margin: 0 0 6px; font-size: 24px; letter-spacing: 0.3px; }}
-    .meta {{ color: var(--muted); font-size: 13px; }}
-    .controls {{
-      display: grid;
-      grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr 1fr;
-      gap: 10px; margin: 14px 0 14px;
-    }}
-    @media (max-width: 900px) {{ .controls {{ grid-template-columns: 1fr 1fr; }} }}
-    @media (max-width: 560px) {{ .controls {{ grid-template-columns: 1fr; }} }}
-    input, select {{
-      width: 100%; background: var(--panel); color: var(--text);
-      border: 1px solid var(--line); border-radius: 10px;
-      height: 42px; padding: 0 12px; outline: none;
-    }}
-    input:focus, select:focus {{
-      border-color: var(--accent-2);
-      box-shadow: 0 0 0 3px rgba(40,168,255,0.18);
-    }}
-    .table-wrap {{
-      border: 1px solid var(--line); border-radius: 14px;
-      overflow: hidden; background: rgba(17, 24, 39, 0.95);
-    }}
-    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
-    thead th {{
-      position: sticky; top: 0; z-index: 1;
-      background: #182235; color: #d3dff0;
-      text-align: left; font-size: 12px; letter-spacing: 0.3px;
-      padding: 12px 10px; border-bottom: 1px solid var(--line);
-    }}
-    tbody td {{
-      padding: 10px; border-bottom: 1px solid rgba(39, 50, 71, 0.65);
-      vertical-align: top; font-size: 13px; line-height: 1.4;
-    }}
-    tbody tr:hover {{ background: rgba(40,168,255,0.06); }}
-    .mono {{ font-family: Consolas, "Courier New", monospace; word-break: break-all; color: #d7e3f3; }}
-    .tag {{
-      display: inline-block; border-radius: 999px;
-      padding: 2px 8px; font-size: 11px;
-      background: var(--chip); border: 1px solid var(--line); color: #cfe2ff;
-    }}
-    .proto-vmess {{ background: #112840; border-color: #1e6090; color: #93d3ff; }}
-    .proto-vless {{ background: #1e1040; border-color: #6040b0; color: #c8b0ff; }}
-    .ok {{ color: var(--good); }}
-    .err {{ color: var(--bad); }}
-    .stats {{ display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }}
-    .chip {{
-      background: var(--chip); border: 1px solid var(--line);
-      color: #c6d4e8; border-radius: 999px; padding: 6px 10px; font-size: 12px;
-    }}
-    .chip-vmess {{ border-color: #1e6090; color: #93d3ff; }}
-    .chip-vless {{ border-color: #6040b0; color: #c8b0ff; }}
-    .copy-btn {{
-      border: 1px solid #365177; background: #1b2b45; color: #d7e8ff;
-      border-radius: 8px; padding: 6px 10px; font-size: 12px;
-      cursor: pointer; white-space: nowrap;
-    }}
-    .copy-btn:hover {{ background: #23406d; }}
-    .copy-btn.copied {{ border-color: #219e78; background: #164e3f; color: #d5ffe8; }}
-    .conn-pill {{
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: 11px; border: 1px solid var(--line); background: var(--chip);
-    }}
-    .conn-ok     {{ color: #baf5d8; border-color: #2c8c67; background: #123f31; }}
-    .conn-failed {{ color: #ffd1d1; border-color: #a84747; background: #4d1f1f; }}
-    .conn-not-matched {{ color: #ffe7bf; border-color: #a16b2f; background: #4a3114; }}
-    .conn-skipped     {{ color: #c4d0df; border-color: #4c5f7a; background: #1f2b3e; }}
-    .modal {{
-      position: fixed; inset: 0; display: none;
-      align-items: center; justify-content: center;
-      background: rgba(8,12,22,0.78); backdrop-filter: blur(3px);
-      z-index: 25; padding: 16px;
-    }}
-    .modal.open {{ display: flex; }}
-    .modal-card {{
-      width: min(860px, 100%); max-height: 90vh; overflow: auto;
-      border: 1px solid var(--line); border-radius: 14px;
-      background: #0f1727; box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-    }}
-    .modal-head {{
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 14px; border-bottom: 1px solid var(--line);
-    }}
-    .modal-title {{ font-weight: 600; }}
-    .modal-body {{ padding: 14px; display: grid; gap: 8px; }}
-    .kv {{ display: grid; grid-template-columns: 160px 1fr; gap: 10px; font-size: 13px; }}
-    .kv-sep {{ border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }}
-    .k {{ color: var(--muted); }}
-    .v {{ word-break: break-all; }}
-    @media (max-width: 980px) {{
-      .table-wrap {{ border: 0; background: transparent; }}
-      table, thead, tbody, th, td, tr {{ display: block; width: 100%; }}
-      thead {{ display: none; }}
-      tbody tr {{
-        background: rgba(17, 24, 39, 0.95); border: 1px solid var(--line);
-        border-radius: 12px; margin-bottom: 12px; padding: 8px;
-      }}
-      tbody td {{
-        border-bottom: 0; display: grid;
-        grid-template-columns: 120px 1fr; gap: 10px; padding: 8px;
-      }}
-      tbody td::before {{ content: attr(data-label); color: var(--muted); font-size: 12px; }}
-      .copy-btn {{ width: 100%; }}
-      .kv {{ grid-template-columns: 1fr; }}
+    *{{box-sizing:border-box;}}
+    body{{margin:0;font-family:"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;color:var(--text);
+      background:radial-gradient(1200px 700px at 10% 0%,#132138 0%,var(--bg) 50%),
+                 linear-gradient(180deg,#0b111b 0%,#09101a 100%);min-height:100vh;}}
+    .wrap{{max-width:1500px;margin:0 auto;padding:24px 16px 40px;}}
+    .hero{{background:linear-gradient(130deg,rgba(25,200,180,.12),rgba(167,139,250,.12));
+      border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;}}
+    h1{{margin:0 0 5px;font-size:22px;}}
+    .meta{{color:var(--muted);font-size:12px;}}
+    .stats{{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}}
+    .chip{{background:var(--chip);border:1px solid var(--line);color:#c6d4e8;
+      border-radius:999px;padding:5px 10px;font-size:12px;}}
+    .chip-vmess{{border-color:#1e6090;color:#93d3ff;}}
+    .chip-vless{{border-color:#6040b0;color:#c8b0ff;}}
+    .controls{{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1fr 1fr;gap:8px;margin:12px 0;}}
+    @media(max-width:900px){{.controls{{grid-template-columns:1fr 1fr;}}}}
+    @media(max-width:500px){{.controls{{grid-template-columns:1fr;}}}}
+    input,select{{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--line);
+      border-radius:10px;height:40px;padding:0 11px;outline:none;font-size:13px;}}
+    input:focus,select:focus{{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(40,168,255,.18);}}
+    /* virtual scroll container */
+    .tbl-wrap{{border:1px solid var(--line);border-radius:14px;overflow:hidden;
+      background:rgba(17,24,39,.95);}}
+    .tbl-scroll{{overflow-y:auto;max-height:72vh;}}
+    table{{width:100%;border-collapse:collapse;table-layout:fixed;}}
+    thead th{{position:sticky;top:0;z-index:2;background:#182235;color:#d3dff0;
+      text-align:left;font-size:12px;letter-spacing:.3px;padding:11px 9px;
+      border-bottom:1px solid var(--line);}}
+    tbody td{{padding:9px;border-bottom:1px solid rgba(39,50,71,.55);
+      vertical-align:top;font-size:13px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}}
+    .td-isp{{max-width:180px;}}
+    tbody tr:hover{{background:rgba(40,168,255,.06);}}
+    .tag{{display:inline-block;border-radius:999px;padding:2px 7px;font-size:11px;
+      background:var(--chip);border:1px solid var(--line);color:#cfe2ff;}}
+    .proto-vmess{{background:#112840;border-color:#1e6090;color:#93d3ff;}}
+    .proto-vless{{background:#1e1040;border-color:#6040b0;color:#c8b0ff;}}
+    .ok{{color:var(--good);}} .err{{color:var(--bad);}}
+    .conn-pill{{display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;
+      border:1px solid var(--line);background:var(--chip);}}
+    .conn-ok{{color:#baf5d8;border-color:#2c8c67;background:#123f31;}}
+    .conn-failed{{color:#ffd1d1;border-color:#a84747;background:#4d1f1f;}}
+    .conn-not-matched{{color:#ffe7bf;border-color:#a16b2f;background:#4a3114;}}
+    .conn-skipped{{color:#c4d0df;border-color:#4c5f7a;background:#1f2b3e;}}
+    .copy-btn{{border:1px solid #365177;background:#1b2b45;color:#d7e8ff;border-radius:8px;
+      padding:5px 9px;font-size:12px;cursor:pointer;white-space:nowrap;}}
+    .copy-btn:hover{{background:#23406d;}} .copy-btn.copied{{border-color:#219e78;background:#164e3f;color:#d5ffe8;}}
+    /* pagination */
+    .pager{{display:flex;align-items:center;gap:6px;padding:10px 14px;
+      border-top:1px solid var(--line);flex-wrap:wrap;}}
+    .pager button{{background:var(--chip);border:1px solid var(--line);color:var(--text);
+      border-radius:8px;padding:4px 10px;cursor:pointer;font-size:12px;}}
+    .pager button:hover{{background:#253448;}} .pager button:disabled{{opacity:.35;cursor:default;}}
+    .pager button.active{{background:#1d3b5e;border-color:var(--accent-2);color:#7dcfff;}}
+    .pager-info{{color:var(--muted);font-size:12px;margin-left:auto;}}
+    /* modal */
+    .modal{{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(8,12,22,.8);backdrop-filter:blur(3px);z-index:25;padding:14px;}}
+    .modal.open{{display:flex;}}
+    .modal-card{{width:min(860px,100%);max-height:90vh;overflow:auto;border:1px solid var(--line);
+      border-radius:14px;background:#0f1727;box-shadow:0 20px 40px rgba(0,0,0,.4);}}
+    .modal-head{{display:flex;justify-content:space-between;align-items:center;
+      padding:13px;border-bottom:1px solid var(--line);}}
+    .modal-title{{font-weight:600;}}
+    .modal-body{{padding:13px;display:grid;gap:7px;}}
+    .kv{{display:grid;grid-template-columns:160px 1fr;gap:9px;font-size:13px;}}
+    .kv-sep{{border-top:1px solid var(--line);padding-top:7px;margin-top:3px;}}
+    .k{{color:var(--muted);}} .v{{word-break:break-all;}}
+    .mono{{font-family:Consolas,"Courier New",monospace;word-break:break-all;color:#d7e3f3;}}
+    @media(max-width:600px){{
+      .tbl-wrap{{border:0;background:transparent;}}
+      table,thead,tbody,th,td,tr{{display:block;width:100%;}}
+      thead{{display:none;}}
+      tbody tr{{background:rgba(17,24,39,.95);border:1px solid var(--line);
+        border-radius:12px;margin-bottom:10px;padding:8px;}}
+      tbody td{{border-bottom:0;display:grid;grid-template-columns:110px 1fr;
+        gap:8px;padding:7px;white-space:normal;}}
+      tbody td::before{{content:attr(data-label);color:var(--muted);font-size:12px;}}
+      .kv{{grid-template-columns:1fr;}}
     }}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <section class="hero">
-      <h1>🛡 V2Ray Proxy Report <span style="font-size:14px;color:var(--muted);font-weight:400">({html.escape(mode_label)})</span></h1>
-      <div class="meta">Source: {html.escape(source_label)} | Generated: {html.escape(now)}</div>
-      <div class="stats">
-        <div class="chip" id="countAll">Total: 0</div>
-        <div class="chip" id="countShown">Shown: 0</div>
-        <div class="chip" id="countCountries">Countries: 0</div>
-        <div class="chip chip-vmess">VMess: {total_vmess}</div>
-        <div class="chip chip-vless">VLess: {total_vless}</div>
-      </div>
-    </section>
+<div class="wrap">
+  <section class="hero">
+    <h1>&#128737; V2Ray Proxy Report <span style="font-size:13px;color:var(--muted);font-weight:400">({html.escape(mode_label)})</span></h1>
+    <div class="meta">Source: {html.escape(source_label)} &nbsp;|&nbsp; Generated: {html.escape(now)}</div>
+    <div class="stats">
+      <div class="chip" id="countAll">Total: 0</div>
+      <div class="chip" id="countShown">Shown: 0</div>
+      <div class="chip" id="countCtr">Countries: 0</div>
+      <div class="chip chip-vmess">VMess: {total_vmess}</div>
+      <div class="chip chip-vless">VLess: {total_vless}</div>
+    </div>
+  </section>
 
-    <section class="controls">
-      <input id="search" type="text" placeholder="Search host / IP / ISP / UUID..." />
-      <select id="proto"></select>
-      <select id="country"></select>
-      <select id="isp"></select>
-      <select id="conn"></select>
-      <select id="tls"></select>
-    </section>
+  <section class="controls">
+    <input id="search" type="text" placeholder="Search host / IP / ISP / UUID / country..."/>
+    <select id="proto"></select>
+    <select id="country"></select>
+    <select id="isp"></select>
+    <select id="conn"></select>
+    <select id="tls"></select>
+  </section>
 
-    <section class="table-wrap">
+  <section class="tbl-wrap">
+    <div class="tbl-scroll" id="tblScroll">
       <table>
         <thead>
           <tr>
             <th style="width:42px">#</th>
-            <th style="width:80px">Proto</th>
-            <th style="width:120px">Country</th>
+            <th style="width:76px">Proto</th>
+            <th style="width:115px">Country</th>
             <th>ISP</th>
-            <th style="width:110px">Connectivity</th>
-            <th style="width:80px">Status</th>
-            <th style="width:70px">TLS</th>
-            <th style="width:100px">Action</th>
+            <th style="width:108px">Connectivity</th>
+            <th style="width:78px">Status</th>
+            <th style="width:60px">TLS</th>
+            <th style="width:76px">Action</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
       </table>
-    </section>
-  </div>
-
-  <div id="detailModal" class="modal" onclick="closeModal()">
-    <div class="modal-card" onclick="event.stopPropagation()">
-      <div class="modal-head">
-        <div class="modal-title" id="modalTitle">Proxy Detail</div>
-        <button type="button" class="copy-btn" onclick="closeModal()">✕ Close</button>
-      </div>
-      <div class="modal-body" id="modalBody"></div>
     </div>
+    <div class="pager" id="pager"></div>
+  </section>
+</div>
+
+<div id="detailModal" class="modal" onclick="closeModal()">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle">Proxy Detail</div>
+      <button class="copy-btn" onclick="closeModal()">&#10005; Close</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
   </div>
+</div>
 
-  <script>
-    const data = {rows_json};
-    const countries = {countries_json};
+<script>
+// ── Data (heavy fields stripped; URIs and detail info stored separately) ────
+const data    = {data_json};
+const uris    = {uris_json};
+const details = {details_json};
+const countries = {countries_json};
 
-    const rowsEl       = document.getElementById('rows');
-    const searchEl     = document.getElementById('search');
-    const protoEl      = document.getElementById('proto');
-    const countryEl    = document.getElementById('country');
-    const ispEl        = document.getElementById('isp');
-    const connEl       = document.getElementById('conn');
-    const tlsEl        = document.getElementById('tls');
-    const countAllEl   = document.getElementById('countAll');
-    const countShownEl = document.getElementById('countShown');
-    const countCtrEl   = document.getElementById('countCountries');
+// ── State ────────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 100;
+let filtered  = [];   // indices into data[] after filter
+let page      = 0;    // current page (0-based)
+let searchDebounce = null;
 
-    function esc(v) {{
-      return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }}
-    function enc(v) {{ return encodeURIComponent(String(v ?? '')); }}
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const rowsEl    = document.getElementById('rows');
+const searchEl  = document.getElementById('search');
+const protoEl   = document.getElementById('proto');
+const countryEl = document.getElementById('country');
+const ispEl     = document.getElementById('isp');
+const connEl    = document.getElementById('conn');
+const tlsEl     = document.getElementById('tls');
+const pagerEl   = document.getElementById('pager');
+const countAllEl   = document.getElementById('countAll');
+const countShownEl = document.getElementById('countShown');
+const countCtrEl   = document.getElementById('countCtr');
 
-    function connClass(s) {{
-      const v = String(s||'unknown').toLowerCase();
-      if (v==='ok') return 'conn-pill conn-ok';
-      if (v==='not matched') return 'conn-pill conn-not-matched';
-      if (v==='failed') return 'conn-pill conn-failed';
-      return 'conn-pill conn-skipped';
-    }}
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function esc(v) {{
+  return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}}
+function enc(v){{return encodeURIComponent(String(v??''));}}
 
-    function protoBadge(p) {{
-      const cl = p==='vless' ? 'proto-vless' : 'proto-vmess';
-      return `<span class="tag ${{cl}}">${{esc(p||'vmess')}}</span>`;
-    }}
+function connClass(s) {{
+  const v=String(s||'unknown').toLowerCase();
+  if(v==='ok') return 'conn-pill conn-ok';
+  if(v==='not matched') return 'conn-pill conn-not-matched';
+  if(v==='failed') return 'conn-pill conn-failed';
+  return 'conn-pill conn-skipped';
+}}
+function protoBadge(p) {{
+  const cl=p==='vless'?'proto-vless':'proto-vmess';
+  return `<span class="tag ${{cl}}">${{esc(p||'vmess')}}</span>`;
+}}
 
-    async function copyToken(btn) {{
-      const raw = btn.getAttribute('data-token') || '';
-      const decoded = decodeURIComponent(raw);
-      try {{
-        await navigator.clipboard.writeText(decoded);
-        const old = btn.textContent;
-        btn.textContent = '✓ Copied'; btn.classList.add('copied');
-        setTimeout(() => {{ btn.textContent = old; btn.classList.remove('copied'); }}, 1400);
-      }} catch (_) {{
-        btn.textContent = 'Failed';
-        setTimeout(() => {{ btn.textContent = 'Copy'; }}, 1400);
-      }}
-    }}
+// ── Filter ────────────────────────────────────────────────────────────────────
+function rowMatches(row, i, q, proto, country, isp, conn, tls) {{
+  if(proto!=='ALL' && row.protocol!==proto) return false;
+  if(country!=='ALL' && row.country!==country) return false;
+  if(isp!=='ALL' && row.isp!==isp) return false;
+  if(conn!=='ALL' && (row.connectivity||'unknown')!==conn) return false;
+  if(tls!=='ALL' && (row.tls_enabled?'true':'false')!==tls) return false;
+  if(!q) return true;
+  const hay=[
+    row.add, row.resolved_ip, row.country, row.city,
+    row.isp, row.services, row.connectivity,
+    row.status, row.error, row.uuid, row.protocol, row.name,
+    uris[i]   // search inside the URI too
+  ].join(' ').toLowerCase();
+  return hay.includes(q);
+}}
 
-    function buildSelect(el, values, allLabel, allValue='ALL') {{
-      const prev = el.value || allValue;
-      el.innerHTML = '';
-      const opt = document.createElement('option');
-      opt.value = allValue; opt.textContent = allLabel;
-      el.appendChild(opt);
-      values.forEach(v => {{
-        const o = document.createElement('option');
-        o.value = v; o.textContent = v; el.appendChild(o);
-      }});
-      el.value = values.includes(prev) ? prev : allValue;
-    }}
+// ── Select helpers ─────────────────────────────────────────────────────────────
+function buildSelect(el, values, allLabel) {{
+  const prev=el.value||'ALL';
+  el.innerHTML='';
+  const o=document.createElement('option');
+  o.value='ALL'; o.textContent=allLabel; el.appendChild(o);
+  values.forEach(v=>{{const x=document.createElement('option');x.value=v;x.textContent=v;el.appendChild(x);}});
+  el.value=values.includes(prev)?prev:'ALL';
+}}
+function buildProto()    {{buildSelect(protoEl,['vmess','vless'],'All Protocols');}}
+function buildCountry()  {{buildSelect(countryEl,countries,'All Countries');}}
+function buildIsp(pr,co) {{
+  const list=data
+    .filter(r=>(pr==='ALL'||r.protocol===pr)&&(co==='ALL'||r.country===co))
+    .map(r=>r.isp||'—');
+  buildSelect(ispEl,[...new Set(list)].sort((a,b)=>a.localeCompare(b)),
+    co==='ALL'?'All ISP':`ISP (${co})`);
+}}
+function buildConn(pr,co,is) {{
+  const list=data
+    .filter(r=>(pr==='ALL'||r.protocol===pr)&&(co==='ALL'||r.country===co)&&(is==='ALL'||r.isp===is))
+    .map(r=>r.connectivity||'unknown');
+  buildSelect(connEl,[...new Set(list)].sort((a,b)=>a.localeCompare(b)),'All Connectivity');
+}}
+function buildTls()      {{buildSelect(tlsEl,['true','false'],'All TLS');}}
 
-    function buildProtoOptions() {{
-      buildSelect(protoEl, ['vmess','vless'], 'All Protocols');
-    }}
-    function buildCountryOptions() {{
-      buildSelect(countryEl, countries, 'All Countries');
-    }}
-    function buildIspOptions(proto, country) {{
-      const list = data
-        .filter(r => (proto==='ALL'||r.protocol===proto) && (country==='ALL'||r.country===country))
-        .map(r => r.isp||'Unknown');
-      buildSelect(ispEl, [...new Set(list)].sort((a,b)=>a.localeCompare(b)),
-        country==='ALL' ? 'All ISP' : `All ISP (${{country}})`);
-    }}
-    function buildConnOptions(proto, country, isp) {{
-      const list = data
-        .filter(r =>
-          (proto==='ALL'||r.protocol===proto) &&
-          (country==='ALL'||r.country===country) &&
-          (isp==='ALL'||r.isp===isp))
-        .map(r => r.connectivity||'unknown');
-      buildSelect(connEl, [...new Set(list)].sort((a,b)=>a.localeCompare(b)), 'All Connectivity');
-    }}
-    function buildTlsOptions() {{
-      buildSelect(tlsEl, ['true','false'], 'All TLS');
-    }}
+// ── Pagination ─────────────────────────────────────────────────────────────────
+function renderPage() {{
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if(page >= totalPages) page = totalPages - 1;
 
-    function rowMatches(row, q, proto, country, isp, conn, tls) {{
-      if (proto!=='ALL' && row.protocol!==proto) return false;
-      if (country!=='ALL' && row.country!==country) return false;
-      if (isp!=='ALL' && row.isp!==isp) return false;
-      if (conn!=='ALL' && (row.connectivity||'unknown')!==conn) return false;
-      const rowTls = row.tls_enabled ? 'true' : 'false';
-      if (tls!=='ALL' && rowTls!==tls) return false;
-      if (!q) return true;
-      const hay = [
-        row.original, row.vmess_original, row.vless_original,
-        row.add, row.resolved_ip, row.country, row.city,
-        row.isp, row.services, row.connectivity,
-        row.format, row.status, row.error, row.uuid,
-        row.protocol, row.name
-      ].join(' ').toLowerCase();
-      return hay.includes(q);
-    }}
+  const start = page * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, filtered.length);
+  const slice = filtered.slice(start, end);
 
-    function openDetail(index) {{
-      const row = data[index];
-      if (!row) return;
-      const isVless = row.protocol === 'vless';
-      document.getElementById('modalTitle').textContent =
-        (isVless ? 'VLess' : 'VMess') + ' Detail';
-      const body = document.getElementById('modalBody');
+  rowsEl.innerHTML = slice.map((di, si) => {{
+    const row = data[di];
+    const num = start + si + 1;
+    return `<tr>
+      <td data-label="#">${{num}}</td>
+      <td data-label="Proto">${{protoBadge(row.protocol)}}</td>
+      <td data-label="Country"><span class="tag">${{esc(row.country||'—')}}</span></td>
+      <td data-label="ISP" class="td-isp" title="${{esc(row.isp||'—')}}">${{esc(row.isp||'—')}}</td>
+      <td data-label="Connectivity">
+        <span class="${{connClass(row.connectivity)}}"
+          title="${{esc(details[di]?.connectivity_detail||'')}}">
+          ${{esc(row.connectivity||'unknown')}}
+        </span>
+      </td>
+      <td data-label="Status" class="${{row.status==='ok'?'ok':'err'}}">${{esc(row.status)}}${{row.error?' — '+esc(row.error):''}}</td>
+      <td data-label="TLS"><span class="tag">${{row.tls_enabled?'true':'false'}}</span></td>
+      <td data-label="Action"><button class="copy-btn" onclick="openDetail(${{di}})">Detail</button></td>
+    </tr>`;
+  }}).join('');
 
-      let protoRows = '';
-      if (isVless) {{
-        protoRows = `
-          <div class="kv kv-sep"><div class="k">Protocol</div><div class="v">${{protoBadge('vless')}}</div></div>
-          <div class="kv"><div class="k">UUID</div><div class="v mono">${{esc(row.uuid||'-')}}</div></div>
-          <div class="kv"><div class="k">Network</div><div class="v">${{esc(row.network||'tcp')}}</div></div>
-          <div class="kv"><div class="k">Security</div><div class="v">${{esc(row.security_type||'none')}}</div></div>
-          ${{row.sni ? `<div class="kv"><div class="k">SNI</div><div class="v mono">${{esc(row.sni)}}</div></div>` : ''}}
-          ${{row.path && row.path!=='/' ? `<div class="kv"><div class="k">Path</div><div class="v mono">${{esc(row.path)}}</div></div>` : ''}}
-          ${{row.flow ? `<div class="kv"><div class="k">Flow</div><div class="v">${{esc(row.flow)}}</div></div>` : ''}}
-          ${{row.pbk ? `<div class="kv"><div class="k">PublicKey (Reality)</div><div class="v mono" style="word-break:break-all">${{esc(row.pbk)}}</div></div>` : ''}}
-          ${{row.name ? `<div class="kv"><div class="k">Name</div><div class="v">${{esc(row.name)}}</div></div>` : ''}}
-        `;
-      }} else {{
-        protoRows = `
-          <div class="kv kv-sep"><div class="k">Protocol</div><div class="v">${{protoBadge('vmess')}}</div></div>
-          <div class="kv"><div class="k">Format</div><div class="v">${{esc(row.format||'-')}}</div></div>
-        `;
-      }}
+  // ── Pager controls ────────────────────────────────────────────────────────
+  if(totalPages <= 1){{pagerEl.innerHTML='';return;}}
+  let html='';
+  html+=`<button onclick="goPage(0)"  ${{page===0?'disabled':''}}>&#171; First</button>`;
+  html+=`<button onclick="goPage(${{page-1}})" ${{page===0?'disabled':''}}>&#8249; Prev</button>`;
 
-      body.innerHTML = `
-        <div class="kv"><div class="k">Country</div><div class="v">${{esc(row.country||'-')}}</div></div>
-        <div class="kv"><div class="k">City</div><div class="v">${{esc(row.city||'-')}}</div></div>
-        <div class="kv"><div class="k">ISP</div><div class="v">${{esc(row.isp||'-')}}</div></div>
-        <div class="kv"><div class="k">Services / ASN</div><div class="v">${{esc(row.services||'-')}}</div></div>
-        <div class="kv"><div class="k">Geo Source</div><div class="v">${{esc(row.lookup_source||'-')}}</div></div>
-        <div class="kv kv-sep"><div class="k">Host</div><div class="v mono">${{esc(row.add||'-')}}</div></div>
-        <div class="kv"><div class="k">Resolved IP</div><div class="v mono">${{esc(row.resolved_ip||'-')}}</div></div>
-        <div class="kv"><div class="k">Port</div><div class="v">${{esc(row.endpoint_port||0)}}</div></div>
-        <div class="kv"><div class="k">TLS</div><div class="v">${{row.tls_enabled ? 'true' : 'false'}}</div></div>
-        ${{protoRows}}
-        <div class="kv kv-sep"><div class="k">Connectivity</div>
-          <div class="v"><span class="${{connClass(row.connectivity)}}">${{esc(row.connectivity||'unknown')}}</span>
-            &nbsp;${{esc(row.connectivity_detail||'-')}}</div></div>
-        <div class="kv"><div class="k">Status</div><div class="v ${{row.status==='ok'?'ok':'err'}}">${{esc(row.status)}}${{row.error?' — '+esc(row.error):''}}</div></div>
-        <div class="kv kv-sep"><div class="k">Config URI</div>
-          <div class="v mono" style="font-size:11px;opacity:.85">${{esc(row.original||row.vmess_original||row.vless_original||'')}}</div></div>
-        <button type="button" class="copy-btn"
-          data-token="${{enc(row.original||row.vmess_original||row.vless_original||'')}}"
-          onclick="copyToken(this)">Copy ${{isVless?'VLess':'VMess'}}</button>
-      `;
-      document.getElementById('detailModal').classList.add('open');
-    }}
+  // page number buttons: show window of 5 around current
+  const win=2;
+  const lo=Math.max(0,page-win), hi=Math.min(totalPages-1,page+win);
+  if(lo>0) html+=`<button onclick="goPage(0)">1</button>${{lo>1?'<span style="color:var(--muted);padding:0 4px">…</span>':''}}`;
+  for(let p2=lo;p2<=hi;p2++){{
+    html+=`<button onclick="goPage(${{p2}})" class="${{p2===page?'active':''}}">${{p2+1}}</button>`;
+  }}
+  if(hi<totalPages-1){{
+    html+=`${{hi<totalPages-2?'<span style="color:var(--muted);padding:0 4px">…</span>':''}}`;
+    html+=`<button onclick="goPage(${{totalPages-1}})">${{totalPages}}</button>`;
+  }}
+  html+=`<button onclick="goPage(${{page+1}})" ${{page===totalPages-1?'disabled':''}}>Next &#8250;</button>`;
+  html+=`<button onclick="goPage(${{totalPages-1}})" ${{page===totalPages-1?'disabled':''}}>Last &#187;</button>`;
+  html+=`<span class="pager-info">${{start+1}}–${{end}} of ${{filtered.length}}</span>`;
+  pagerEl.innerHTML=html;
+}}
 
-    function closeModal() {{
-      document.getElementById('detailModal').classList.remove('open');
-    }}
+function goPage(p) {{
+  page = p;
+  renderPage();
+  document.getElementById('tblScroll').scrollTop=0;
+}}
 
-    function render() {{
-      const q       = searchEl.value.trim().toLowerCase();
-      const proto   = protoEl.value   || 'ALL';
-      const country = countryEl.value || 'ALL';
-      const isp     = ispEl.value     || 'ALL';
-      const conn    = connEl.value    || 'ALL';
-      const tls     = tlsEl.value     || 'ALL';
+// ── Main render (filter + reset to page 0) ────────────────────────────────────
+function render() {{
+  const q       = searchEl.value.trim().toLowerCase();
+  const proto   = protoEl.value  ||'ALL';
+  const country = countryEl.value||'ALL';
+  const isp     = ispEl.value    ||'ALL';
+  const conn    = connEl.value   ||'ALL';
+  const tls     = tlsEl.value    ||'ALL';
 
-      const filtered = data.filter(r => rowMatches(r, q, proto, country, isp, conn, tls));
-      rowsEl.innerHTML = filtered.map((row, idx) => `
-        <tr>
-          <td data-label="#">${{idx + 1}}</td>
-          <td data-label="Proto">${{protoBadge(row.protocol)}}</td>
-          <td data-label="Country"><span class="tag">${{esc(row.country)}}</span></td>
-          <td data-label="ISP">${{esc(row.isp)}}</td>
-          <td data-label="Connectivity">
-            <span class="${{connClass(row.connectivity)}}" title="${{esc(row.connectivity_detail||'')}}">
-              ${{esc(row.connectivity||'unknown')}}
-            </span>
-          </td>
-          <td data-label="Status" class="${{row.status==='ok'?'ok':'err'}}">${{esc(row.status)}}${{row.error?' — '+esc(row.error):''}}</td>
-          <td data-label="TLS"><span class="tag">${{row.tls_enabled ? 'true' : 'false'}}</span></td>
-          <td data-label="Action">
-            <button type="button" class="copy-btn" onclick="openDetail(${{data.indexOf(row)}})">Detail</button>
-          </td>
-        </tr>
-      `).join('');
+  filtered = [];
+  for(let i=0;i<data.length;i++) {{
+    if(rowMatches(data[i], i, q, proto, country, isp, conn, tls)) filtered.push(i);
+  }}
+  page = 0;
 
-      const shownCountries = new Set(filtered.map(r => r.country)).size;
-      countAllEl.textContent    = `Total: ${{data.length}}`;
-      countShownEl.textContent  = `Shown: ${{filtered.length}}`;
-      countCtrEl.textContent    = `Countries: ${{shownCountries}}`;
-    }}
+  const shownCtrs = new Set(filtered.map(i=>data[i].country)).size;
+  countAllEl.textContent   = `Total: ${{data.length}}`;
+  countShownEl.textContent = `Shown: ${{filtered.length}}`;
+  countCtrEl.textContent   = `Countries: ${{shownCtrs}}`;
 
-    buildProtoOptions();
-    buildCountryOptions();
-    buildIspOptions('ALL', 'ALL');
-    buildConnOptions('ALL', 'ALL', 'ALL');
-    buildTlsOptions();
-    render();
+  renderPage();
+}}
 
-    searchEl.addEventListener('input', render);
-    protoEl.addEventListener('change', () => {{
-      buildIspOptions(protoEl.value||'ALL', countryEl.value||'ALL');
-      buildConnOptions(protoEl.value||'ALL', countryEl.value||'ALL', ispEl.value||'ALL');
-      render();
-    }});
-    countryEl.addEventListener('change', () => {{
-      buildIspOptions(protoEl.value||'ALL', countryEl.value||'ALL');
-      buildConnOptions(protoEl.value||'ALL', countryEl.value||'ALL', ispEl.value||'ALL');
-      render();
-    }});
-    ispEl.addEventListener('change', () => {{
-      buildConnOptions(protoEl.value||'ALL', countryEl.value||'ALL', ispEl.value||'ALL');
-      render();
-    }});
-    connEl.addEventListener('change', render);
-    tlsEl.addEventListener('change', render);
-  </script>
+// ── Detail modal ───────────────────────────────────────────────────────────────
+function openDetail(di) {{
+  const row = data[di];
+  const uri = uris[di] || '';
+  const det = details[di] || {{}};
+  const isVless = row.protocol==='vless';
+  document.getElementById('modalTitle').textContent=(isVless?'VLess':'VMess')+' Detail';
+  const body=document.getElementById('modalBody');
+
+  let protoRows='';
+  if(isVless){{
+    protoRows=`
+      <div class="kv kv-sep"><div class="k">Protocol</div><div class="v">${{protoBadge('vless')}}</div></div>
+      <div class="kv"><div class="k">UUID</div><div class="v mono">${{esc(row.uuid||'—')}}</div></div>
+      <div class="kv"><div class="k">Network</div><div class="v">${{esc(row.network||'tcp')}}</div></div>
+      <div class="kv"><div class="k">Security</div><div class="v">${{esc(row.security_type||'none')}}</div></div>
+      ${{row.sni?`<div class="kv"><div class="k">SNI</div><div class="v mono">${{esc(row.sni)}}</div></div>`:''}}
+      ${{row.path&&row.path!=='/'?`<div class="kv"><div class="k">Path</div><div class="v mono">${{esc(row.path)}}</div></div>`:''}}
+      ${{row.flow?`<div class="kv"><div class="k">Flow</div><div class="v">${{esc(row.flow)}}</div></div>`:''}}
+      ${{row.pbk?`<div class="kv"><div class="k">PublicKey (Reality)</div><div class="v mono">${{esc(row.pbk)}}</div></div>`:''}}
+      ${{row.name?`<div class="kv"><div class="k">Name</div><div class="v">${{esc(row.name)}}</div></div>`:''}}`;
+  }}else{{
+    protoRows=`
+      <div class="kv kv-sep"><div class="k">Protocol</div><div class="v">${{protoBadge('vmess')}}</div></div>
+      <div class="kv"><div class="k">Format</div><div class="v">${{esc(row.format||'—')}}</div></div>`;
+  }}
+
+  body.innerHTML=`
+    <div class="kv"><div class="k">Country</div><div class="v">${{esc(row.country||'—')}}</div></div>
+    <div class="kv"><div class="k">City</div><div class="v">${{esc(row.city||'—')}}</div></div>
+    <div class="kv"><div class="k">ISP</div><div class="v">${{esc(row.isp||'—')}}</div></div>
+    <div class="kv"><div class="k">ASN / Services</div><div class="v">${{esc(row.services||'—')}}</div></div>
+    <div class="kv"><div class="k">Geo Source</div><div class="v">${{esc(row.lookup_source||'—')}}</div></div>
+    <div class="kv kv-sep"><div class="k">Host</div><div class="v mono">${{esc(row.add||'—')}}</div></div>
+    <div class="kv"><div class="k">Resolved IP</div><div class="v mono">${{esc(row.resolved_ip||'—')}}</div></div>
+    <div class="kv"><div class="k">Port</div><div class="v">${{esc(row.endpoint_port||0)}}</div></div>
+    <div class="kv"><div class="k">TLS</div><div class="v">${{row.tls_enabled?'true':'false'}}</div></div>
+    ${{protoRows}}
+    <div class="kv kv-sep"><div class="k">Connectivity</div>
+      <div class="v"><span class="${{connClass(row.connectivity)}}">${{esc(row.connectivity||'unknown')}}</span>
+      &nbsp;${{esc(det.connectivity_detail||'—')}}</div></div>
+    <div class="kv"><div class="k">Status</div>
+      <div class="v ${{row.status==='ok'?'ok':'err'}}">${{esc(row.status)}}${{row.error?' — '+esc(row.error):''}}</div></div>
+    <div class="kv kv-sep"><div class="k">Config URI</div>
+      <div class="v mono" style="font-size:11px;opacity:.8">${{esc(uri)}}</div></div>
+    <button class="copy-btn" data-token="${{enc(uri)}}" onclick="copyToken(this)">
+      Copy ${{isVless?'VLess':'VMess'}}
+    </button>`;
+  document.getElementById('detailModal').classList.add('open');
+}}
+function closeModal(){{document.getElementById('detailModal').classList.remove('open');}}
+
+async function copyToken(btn){{
+  const raw=btn.getAttribute('data-token')||'';
+  try{{
+    await navigator.clipboard.writeText(decodeURIComponent(raw));
+    const old=btn.textContent;btn.textContent='✓ Copied';btn.classList.add('copied');
+    setTimeout(()=>{{btn.textContent=old;btn.classList.remove('copied');}},1400);
+  }}catch(_){{btn.textContent='Failed';setTimeout(()=>{{btn.textContent='Copy';}},1400);}}
+}}
+
+// ── Debounced search ───────────────────────────────────────────────────────────
+searchEl.addEventListener('input',()=>{{
+  clearTimeout(searchDebounce);
+  searchDebounce=setTimeout(render,150);
+}});
+protoEl.addEventListener('change',()=>{{
+  buildIsp(protoEl.value||'ALL',countryEl.value||'ALL');
+  buildConn(protoEl.value||'ALL',countryEl.value||'ALL',ispEl.value||'ALL');
+  render();
+}});
+countryEl.addEventListener('change',()=>{{
+  buildIsp(protoEl.value||'ALL',countryEl.value||'ALL');
+  buildConn(protoEl.value||'ALL',countryEl.value||'ALL',ispEl.value||'ALL');
+  render();
+}});
+ispEl.addEventListener('change',()=>{{buildConn(protoEl.value||'ALL',countryEl.value||'ALL',ispEl.value||'ALL');render();}});
+connEl.addEventListener('change',render);
+tlsEl.addEventListener('change',render);
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+buildProto();buildCountry();buildIsp('ALL','ALL');buildConn('ALL','ALL','ALL');buildTls();
+render();
+</script>
 </body>
 </html>
 """

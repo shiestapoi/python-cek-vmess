@@ -72,22 +72,7 @@ jobs:
           chmod +x xray-bin/xray
           echo "xray version: $(./xray-bin/xray version | head -1)"
 
-      # Cache GeoLite2 mmdb files — refreshed weekly (Sunday midnight UTC)
-      # Files are also auto-downloaded by the script if cache misses.
-      - name: Cache GeoLite2 mmdb files
-        uses: actions/cache@v4
-        with:
-          path: |
-            geolite2-city-ipv4.mmdb
-            geolite2-city-ipv6.mmdb
-            geolite2-asn-ipv4.mmdb
-            geolite2-asn-ipv6.mmdb
-          key: geolite2-mmdb-${{ env.WEEK }}
-          restore-keys: geolite2-mmdb-
-        env:
-          WEEK: ${{ format('{0}-W{1}', github.run_id && 'run' || 'cache', '0') }}
-
-      # Real weekly cache key derived from date
+      # Cache GeoLite2 mmdb files — refreshed weekly
       - name: Set mmdb cache week key
         id: mmdb-week
         run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
@@ -102,26 +87,19 @@ jobs:
             geolite2-asn-ipv4.mmdb
             geolite2-asn-ipv6.mmdb
           key: geolite2-mmdb-${{ steps.mmdb-week.outputs.week }}
-          restore-keys: |
-            geolite2-mmdb-
+          restore-keys: geolite2-mmdb-
 
       - name: Download mmdb files (cache miss)
         if: steps.mmdb-cache.outputs.cache-hit != 'true'
         run: |
           BASE="https://raw.githubusercontent.com/sapics/ip-location-db/refs/heads/main"
-          declare -A FILES=(
-            ["geolite2-city-ipv4.mmdb"]="$BASE/geolite2-city-mmdb/geolite2-city-ipv4.mmdb"
-            ["geolite2-city-ipv6.mmdb"]="$BASE/geolite2-city-mmdb/geolite2-city-ipv6.mmdb"
-            ["geolite2-asn-ipv4.mmdb"] ="$BASE/geolite2-asn-mmdb/geolite2-asn-ipv4.mmdb"
-            ["geolite2-asn-ipv6.mmdb"] ="$BASE/geolite2-asn-mmdb/geolite2-asn-ipv6.mmdb"
-          )
-          for FILE in "${!FILES[@]}"; do
-            URL="${FILES[$FILE]}"
-            echo "Downloading $FILE ..."
-            curl -fsSL -o "$FILE" "$URL" && \
-              echo "  OK ($(du -sh "$FILE" | cut -f1))" || \
-              echo "  FAILED (will retry via script)"
-          done
+          curl -fsSL -o geolite2-city-ipv4.mmdb "$BASE/geolite2-city-mmdb/geolite2-city-ipv4.mmdb"
+          curl -fsSL -o geolite2-city-ipv6.mmdb "$BASE/geolite2-city-mmdb/geolite2-city-ipv6.mmdb"
+          curl -fsSL -o geolite2-asn-ipv4.mmdb  "$BASE/geolite2-asn-mmdb/geolite2-asn-ipv4.mmdb"
+          curl -fsSL -o geolite2-asn-ipv6.mmdb  "$BASE/geolite2-asn-mmdb/geolite2-asn-ipv6.mmdb"
+          echo "Downloaded mmdb files:"
+          ls -lh geolite2-*.mmdb 2>/dev/null || echo "(none found — will retry via script)"
+
 
       - name: Prepare output directory
         run: mkdir -p site
