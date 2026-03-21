@@ -1,144 +1,421 @@
-# VMess Decode + Geo + Connectivity Report
+# Proxy Checker - VMess & VLESS Config Analyzer
 
-Tool Python untuk:
-- parse daftar `vmess://` dari `vmess_configs.txt`
-- decode VMess base64 JSON / URI-style
-- resolve domain ke IP
-- lookup geolocation IP (ipgeolocation.io + fallback ip-api)
-- cek konektivitas VMess (via `xray` + `curl ifconfig.me/ip`)
-- generate `report.json` dan `report.html` dengan UI filter modern
+A comprehensive Python tool to decode, analyze, and generate interactive reports for VMess and VLESS proxy configurations with IP geolocation and connectivity testing capabilities.
 
-## Requirements
+![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- Python 3.9+
-- `curl`
-- `xray` binary di PATH (wajib untuk connectivity check yang akurat)
+## Features
 
-## Install Xray (Google Colab)
+- **Multi-Protocol Support**: Decode and analyze both VMess and VLESS configurations
+- **Flexible Runtime Modes**: 
+  - VMess only mode
+  - VLESS only mode
+  - Combined mode (both protocols)
+- **Dual Geolocation APIs**:
+  - ipgeolocation.io (with API key support)
+  - ipapi.co (free, no API key required)
+- **Connectivity Testing**: Real proxy connectivity verification using Xray core
+- **Interactive HTML Reports**: Beautiful, filterable web-based reports
+- **Parallel Processing**: Multi-threaded connectivity checks for faster results
+- **Smart Fallbacks**: Automatically fetches configs from remote sources when local files are unavailable
 
-Jalankan cell berikut:
+## Table of Contents
 
+- [Installation](#installation)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [API Keys](#api-keys)
+- [Examples](#examples)
+- [Output Format](#output-format)
+- [Troubleshooting](#troubleshooting)
+
+## Installation
+
+1. Clone or download the script:
 ```bash
-!curl -L -o xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-!unzip -o xray.zip -d xray-bin
-!chmod +x xray-bin/xray
-!./xray-bin/xray version
+git clone <repository-url>
+cd proxy-checker
 ```
 
-Saat run script, inject PATH di command yang sama:
-
+2. Ensure you have Python 3.8 or higher installed:
 ```bash
-!PATH="$PWD/xray-bin:$PATH" python vmess_report.py
+python3 --version
 ```
 
-## Input
+3. No additional Python packages required - uses only standard library!
 
-- Default source: `https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vmess_configs.txt`
-- Jika `-i/--input` diarahkan ke file lokal dan file itu ada, script akan pakai file lokal.
-- Script akan ekstrak semua token `vmess://...` dari file text campuran.
+## Prerequisites
 
-## Output
+### Required
+- Python 3.8+
+- `curl` command-line tool
 
-- `report.json`: data hasil parse/geo/connectivity
-- `report.html`: UI filter (search, country, ISP, connectivity) + tombol copy VMess
+### Optional (for connectivity testing)
+- [Xray-core](https://github.com/XTLS/Xray-core) installed and available in PATH
+
+To install Xray-core:
+```bash
+# macOS with Homebrew
+brew install xray
+
+# Linux - download from releases
+wget https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+unzip Xray-linux-64.zip -d /usr/local/bin/
+chmod +x /usr/local/bin/xray
+
+# Verify installation
+xray version
+```
+
+## Quick Start
+
+### Basic Usage
+
+```bash
+# Check all configs (VMess + VLESS) from default remote sources
+python3 proxy_checker.py
+
+# Check only VMess configs
+python3 proxy_checker.py --mode vmess
+
+# Check only VLESS configs
+python3 proxy_checker.py --mode vless
+
+# Use local config file
+python3 proxy_checker.py --mode vmess -i my_configs.txt
+```
 
 ## Usage
 
-### 1) Proses penuh dari file config
-
-```bash
-python vmess_report.py
+```
+python3 proxy_checker.py [OPTIONS]
 ```
 
-### 2) Testing sebagian entry saja
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-i, --input` | Input config file path | Remote URL based on mode |
+| `-o, --output` | Output HTML report file | `report.html` |
+| `--json` | Output JSON data file | `report.json` |
+| `--mode` | Runtime mode: `vmess`, `vless`, or `all` | `all` |
+| `--report-only` | Generate report from existing JSON | `False` |
+| `--report-json` | Input JSON for report-only mode | `report.json` |
+| `--check-connectivity` | Enable/disable connectivity checks | `True` |
+| `--no-check-connectivity` | Skip connectivity testing | - |
+| `--connect-timeout` | Timeout per connectivity check (seconds) | `10.0` |
+| `--connect-workers` | Parallel workers for connectivity | `80` |
+| `--timeout` | HTTP timeout for IP lookup (seconds) | `6.0` |
+| `--max-entries` | Maximum entries to process | `0` (all) |
+| `--all` | Process all entries | `False` |
+| `--no-progress` | Disable progress bars | `False` |
+| `--no-free-api` | Disable ipapi.co fallback | `False` |
+| `-h, --help` | Show help message | - |
+
+## Configuration
+
+### Environment File (.env)
+
+Create a `.env` file in the same directory to configure API keys:
 
 ```bash
-python vmess_report.py --max-entries 10
+# .env file
+IPGEOLOCATION_API_KEYS=["your-api-key-1", "your-api-key-2"]
 ```
 
-### 3) Proses semua entry
+Or in simpler format:
+```bash
+IPGEOLOCATION_API_KEYS=your-api-key-1,your-api-key-2
+```
+
+### Default Remote Sources
+
+When no local file is specified, the tool automatically fetches from:
+
+| Mode | URL |
+|------|-----|
+| VMess | `https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vmess_configs.txt` |
+| VLESS | `https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vless_configs.txt` |
+
+## API Keys
+
+### Built-in API Keys
+
+The script includes default API keys for ipgeolocation.io. These are shared and may have usage limits.
+
+### Getting Your Own API Key
+
+1. Visit [ipgeolocation.io](https://ipgeolocation.io/)
+2. Sign up for a free account (1000 requests/day)
+3. Get your API key from the dashboard
+4. Add it to your `.env` file
+
+### Free Alternative (ipapi.co)
+
+The script automatically falls back to ipapi.co when ipgeolocation.io keys are exhausted or unavailable:
+
+- **Free tier**: 30,000 requests/month (1,000/day)
+- **No API key required**
+- **Rate limit**: 1 request per second
+
+To disable the free API fallback:
+```bash
+python3 proxy_checker.py --no-free-api
+```
+
+## Examples
+
+### Example 1: Basic Check with Default Sources
 
 ```bash
-python vmess_report.py --all
+python3 proxy_checker.py
+```
+Output:
+```
+VMess source: https://raw.githubusercontent.com/...
+VLESS source: https://raw.githubusercontent.com/...
+Parse VMess        [========================]   150/150   100.00% ETA       0.0s  done in 2.34s
+IP Lookup          [========================]    45/45    100.00% ETA       0.0s  done in 8.92s
+Merge Results      [========================]   150/150   100.00% ETA       0.0s  done in 0.01s
+Parse VLESS        [========================]    89/89    100.00% ETA       0.0s  done in 1.56s
+IP Lookup          [========================]    32/32    100.00% ETA       0.0s  done in 6.45s
+Merge Results      [========================]    89/89    100.00% ETA       0.0s  done in 0.01s
+Connectivity       [========================]   239/239   100.00% ETA       0.0s  done in 45.23s
+
+==================================================
+Processing complete!
+==================================================
+Total entries processed: 239
+  - VMess: 150
+  - VLESS: 89
+HTML report generated: report.html
+JSON data generated: report.json
 ```
 
-### 4) Aktifkan connectivity check (recommended)
+### Example 2: VMess Only from Local File
 
 ```bash
-python vmess_report.py --check-connectivity --connect-timeout 10 --connect-workers 40
+python3 proxy_checker.py --mode vmess -i vmess_configs.txt -o vmess_report.html
 ```
 
-### 4b) Nonaktifkan connectivity check (opsional)
+### Example 3: VLESS Only with Custom Output
 
 ```bash
-python vmess_report.py --no-check-connectivity
+python3 proxy_checker.py --mode vless -i vless_configs.txt --json vless_data.json
 ```
 
-### 5) Generate HTML dari JSON yang sudah ada (tanpa parse ulang config)
+### Example 4: Skip Connectivity Check
 
 ```bash
-python vmess_report.py --report-only --report-json report.json --output report_updated.html
+python3 proxy_checker.py --mode vmess --no-check-connectivity
 ```
 
-### 6) Update connectivity di JSON existing + regenerate HTML
+### Example 5: Process Limited Entries
 
 ```bash
-python vmess_report.py --report-only --report-json report.json --check-connectivity --connect-timeout 10 --connect-workers 40 --output report_updated.html
+# Process only first 50 entries
+python3 proxy_checker.py --mode vmess --max-entries 50
+
+# Process all entries
+python3 proxy_checker.py --mode vmess --all
 ```
 
-## Argumen Penting
+### Example 6: Generate Report from Existing JSON
 
-- `-i, --input` path file vmess text (default: remote VMess source URL)
-- `-o, --output` path output HTML (default: `report.html`)
-- `--json` path output JSON saat mode normal (default: `report.json`)
-- `--report-only` generate HTML dari JSON existing
-- `--report-json` path JSON untuk mode `--report-only`
-- `--max-entries` batasi jumlah entry (default: `0` = all)
-- `--all` paksa proses semua entry
-- `--timeout` timeout lookup geolocation
-- `--check-connectivity` / `--no-check-connectivity` toggle test konektivitas VMess (default: aktif)
-- `--connect-timeout` budget waktu per VMess connectivity check (default: `10`)
-- `--connect-workers` jumlah worker paralel connectivity check (default: `80`)
-- `--no-progress` nonaktifkan progress bar CLI
+```bash
+# First run to generate JSON
+python3 proxy_checker.py --mode vmess --no-check-connectivity
 
-## Catatan Connectivity
+# Later, generate HTML report from JSON
+python3 proxy_checker.py --report-only --report-json report.json -o updated_report.html
+```
 
-- Status `ok`: `ifconfig.me/ip` via VMess cocok dengan salah satu IP endpoint valid.
-- Status `not matched`: koneksi ada, tapi IP keluar tidak cocok.
-- Status `failed`: VMess tidak bisa dipakai untuk load `ifconfig.me/ip` dalam budget waktu.
-- Status `skipped`: entry geolocation/status awal tidak layak diuji.
+### Example 7: Adjust Performance
 
-## GitHub Actions + GitHub Pages
+```bash
+# More workers for faster connectivity checks
+python3 proxy_checker.py --connect-workers 100
 
-Workflow sudah disiapkan di `.github/workflows/report-pages.yml` dengan fitur:
+# Longer timeout for slow connections
+python3 proxy_checker.py --connect-timeout 15
 
-- schedule otomatis tiap 6 jam (`0 */6 * * *`)
-- trigger manual (`workflow_dispatch`)
-- deploy hasil report ke GitHub Pages via GitHub Actions
+# Faster IP lookup (may be less reliable)
+python3 proxy_checker.py --timeout 3
+```
 
-### Cara pakai
+### Example 8: Combined Local Files
 
-1. Push repository ini ke GitHub.
-2. Di GitHub repo, buka **Settings -> Pages**.
-3. Pada **Build and deployment**, set **Source** ke **GitHub Actions**.
-4. Jalankan workflow `Build And Deploy VMess Report`.
+```bash
+# Create combined file
+cat vmess.txt vless.txt > combined.txt
 
-### Auto-update deskripsi repo dengan URL public
+# Process combined file
+python3 proxy_checker.py --mode all -i combined.txt
+```
 
-Workflow juga akan mencoba menulis URL GitHub Pages ke deskripsi repo dalam format `Pages: <url>`.
+## Output Format
 
-- Disarankan set secret `REPO_DESC_TOKEN` di **Settings -> Secrets and variables -> Actions**.
-- Nilai secret: GitHub PAT dengan scope `repo` (dan `workflow` jika kamu juga push perubahan workflow via token itu).
-- Jika secret tidak ada / izin kurang, deploy tetap jalan karena step ini `continue-on-error`.
+### JSON Structure
 
-### Trigger manual opsional
+```json
+[
+  {
+    "type": "vmess",
+    "original": "vmess://eyJhZGQiOi...",
+    "format": "base64-json",
+    "add": "example.com",
+    "endpoint_port": 443,
+    "tls_enabled": true,
+    "resolved_ip": "192.168.1.1",
+    "country": "United States",
+    "city": "Los Angeles",
+    "isp": "Cloudflare Inc",
+    "services": "AS13335 | America/Los_Angeles",
+    "lookup_source": "ipgeolocation.io",
+    "connectivity": "ok",
+    "connectivity_detail": "Matched via xray socks 127.0.0.1:54321: 192.168.1.1",
+    "status": "ok",
+    "error": "",
+    "decoded": "{...}"
+  }
+]
+```
 
-Saat menjalankan manual (`Run workflow`), tersedia input:
+### HTML Report Features
 
-- `check_connectivity` (`true/false`): jalankan connectivity check via xray.
-- `max_entries` (`0` = semua): batasi jumlah entry yang diproses.
+- **Search**: Filter by any field (config, IP, ISP, host, etc.)
+- **Country Filter**: Dropdown to filter by country
+- **ISP Filter**: Dropdown to filter by ISP
+- **Connectivity Filter**: Filter by connection status (ok, failed, not matched, skipped)
+- **TLS Filter**: Filter by TLS enabled status
+- **Type Filter**: Filter by proxy type (VMess/VLESS)
+- **Detail View**: Click "View Detail" to see full config information
+- **Copy Config**: One-click copy of original config URL
 
-Output Pages:
+### Connectivity Status
 
-- `index.html` (report utama)
-- `report.json` (data mentah)
+| Status | Description |
+|--------|-------------|
+| `ok` | Proxy is working correctly |
+| `failed` | Connection failed or timed out |
+| `not matched` | Connected but IP mismatch |
+| `skipped` | Skipped due to previous errors |
+| `unknown` | Not tested |
+
+## Troubleshooting
+
+### Issue: "xray core not found in PATH"
+
+**Solution**: Install Xray-core and ensure it's in your PATH:
+```bash
+which xray  # Should return path to xray
+```
+
+### Issue: All connectivity checks fail
+
+**Possible causes**:
+1. Xray-core not installed
+2. Network restrictions (firewall)
+3. Invalid proxy configs
+
+**Debug**:
+```bash
+# Test without connectivity check first
+python3 proxy_checker.py --no-check-connectivity
+
+# Check if configs are valid in the HTML report
+```
+
+### Issue: IP geolocation returns "Unknown"
+
+**Possible causes**:
+1. All API keys exhausted
+2. Rate limiting
+3. Network issues
+
+**Solutions**:
+- Wait and retry
+- Add your own API keys to `.env`
+- Check network connectivity
+
+### Issue: Script runs slowly
+
+**Solutions**:
+```bash
+# Reduce workers if system is overloaded
+python3 proxy_checker.py --connect-workers 20
+
+# Reduce timeout
+python3 proxy_checker.py --timeout 3 --connect-timeout 5
+
+# Disable connectivity check for faster parsing
+python3 proxy_checker.py --no-check-connectivity
+
+# Process fewer entries
+python3 proxy_checker.py --max-entries 50
+```
+
+### Issue: "DNS lookup failed"
+
+**Cause**: Cannot resolve hostname in config
+
+**Solution**: Check your DNS settings or try a different network
+
+## Geolocation API Response Format
+
+### ipgeolocation.io (with API key)
+
+```json
+{
+  "ip": "91.128.103.196",
+  "location": {
+    "country_name": "Sweden",
+    "city": "Stockholm",
+    ...
+  },
+  "asn": {
+    "as_number": "AS1257",
+    "organization": "Tele2 Sverige AB"
+  },
+  "time_zone": {
+    "name": "Europe/Stockholm"
+  }
+}
+```
+
+### ipapi.co (free)
+
+```json
+{
+  "ip": "91.128.103.196",
+  "country_name": "Sweden",
+  "city": "Kista",
+  "org": "Tele2 SWIPnet",
+  "asn": "AS1257"
+}
+```
+
+## Security Notes
+
+- API keys in `.env` file are only used locally
+- No data is sent to external servers except for geolocation queries
+- Connectivity tests use local Xray instance only
+- Config URLs are processed locally
+
+## License
+
+MIT License - Feel free to use, modify, and distribute.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## Acknowledgments
+
+- [ipgeolocation.io](https://ipgeolocation.io/) for geolocation API
+- [ipapi.co](https://ipapi.co/) for free geolocation service
+- [Xray-core](https://github.com/XTLS/Xray-core) for proxy testing
+- [free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list) for default config sources
