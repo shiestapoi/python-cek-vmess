@@ -620,8 +620,22 @@ def parse_vless(token: str) -> Dict[str, Any]:
     result = _base_row("vless", token)
     result["vless_original"] = token  # backward compat
 
+    # Normalize malformed URLs where query params are appended directly to the
+    # port number without the '?' separator, e.g.:
+    #   vless://uuid@host:44243type=tcp&enc=none  →
+    #   vless://uuid@host:44243?type=tcp&enc=none
+    # [^/?#]* greedily consumes the netloc (stops at /, ?, #) so :\d+ always
+    # matches the last colon+digits sequence, i.e. the port. Works with or
+    # without userinfo (uuid@host or just host) and with IPv6 brackets.
+    normalized = re.sub(
+        r'(://[^/?#]*:\d+)([A-Za-z])',
+        r'\1?\2',
+        token,
+        count=1,
+    )
+
     try:
-        parsed = urllib.parse.urlsplit(token)
+        parsed = urllib.parse.urlsplit(normalized)
     except Exception as exc:
         result["status"] = "error"
         result["error"] = f"Unable to parse vless URI: {exc}"
